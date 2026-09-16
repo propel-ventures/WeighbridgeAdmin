@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run WeighbridgeAdmin (.NET Framework 4.8)",
+            "type": "clr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/WeighbridgeAdmin/bin/Debug/net48/WeighbridgeAdmin.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/WeighbridgeAdmin/bin/Debug/net48",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        }
+    ]
+}
