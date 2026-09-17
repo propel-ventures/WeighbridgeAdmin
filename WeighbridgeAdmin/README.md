@@ -22,7 +22,7 @@ through plain ADO.NET.
 | SQL Server | The shipped `app.config` points at a local **SQL Server Express** instance (`localhost\SQLEXPRESS`). LocalDB works just as well — see the alternative below |
 | `sqlcmd` or SQL Server Management Studio (SSMS) | To run the create script |
 
-There is no `.sln` file — open the folder or `WeighbridgeAdmin.csproj` directly.
+Open `WeighbridgeAdmin.sln` in the repository root, or the `WeighbridgeAdmin.csproj` in this folder — both work.
 
 ---
 
@@ -129,15 +129,15 @@ themselves to match. Products flagged as GST-free are unaffected by it.
 ## 3. Build and run
 
 ```powershell
-# Build
+# Build (from this folder). From the repository root use: dotnet build WeighbridgeAdmin.sln
 dotnet build WeighbridgeAdmin.csproj -c Debug
 
 # Run
 .\bin\Debug\net48\WeighbridgeAdmin.exe
 ```
 
-Or open `WeighbridgeAdmin.csproj` in Visual Studio and press F5. (`dotnet run` also works, but F5 /
-the exe is the normal path for a WinForms app.)
+Or open `WeighbridgeAdmin.sln` (repository root) in Visual Studio and press F5. (`dotnet run` also
+works, but F5 / the exe is the normal path for a WinForms app.)
 
 Release build:
 

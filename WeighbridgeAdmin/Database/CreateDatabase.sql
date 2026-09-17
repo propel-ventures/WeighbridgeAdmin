@@ -183,7 +183,7 @@ INSERT INTO dbo.WeighTickets (Id, TicketNumber, TicketDate, VehicleId, CustomerI
 INSERT INTO dbo.WeighTickets (Id, TicketNumber, TicketDate, VehicleId, CustomerId, ProductId, GrossWeight, TareWeight, PricePerTonne, Subtotal, Gst, Total, Status, Notes)
   SELECT 5, 'WB100005', '2025-07-03', 3, v.CustomerId, 4, 23700, 10100, 33.00, 448.80, 44.88, 493.68, 'Completed', '' FROM dbo.Vehicles v WHERE v.Id = 3;
 INSERT INTO dbo.WeighTickets (Id, TicketNumber, TicketDate, VehicleId, CustomerId, ProductId, GrossWeight, TareWeight, PricePerTonne, Subtotal, Gst, Total, Status, Notes)
-  SELECT 6, 'WB100006', '2025-07-03', 7, v.CustomerId, 3, 41900, 19250, 28.90, 654.58, 65.46, 720.04, 'Void', 'Operator error - reweighed on WB100012' FROM dbo.Vehicles v WHERE v.Id = 7;
+  SELECT 6, 'WB100006', '2025-07-03', 7, v.CustomerId, 3, 41900, 19250, 28.90, 654.58, 65.46, 720.04, 'Void', 'Operator error - reweighed on WB100007' FROM dbo.Vehicles v WHERE v.Id = 7;
 INSERT INTO dbo.WeighTickets (Id, TicketNumber, TicketDate, VehicleId, CustomerId, ProductId, GrossWeight, TareWeight, PricePerTonne, Subtotal, Gst, Total, Status, Notes)
   SELECT 7, 'WB100007', '2025-07-03', 7, v.CustomerId, 3, 42050, 19250, 28.90, 658.92, 65.89, 724.81, 'Completed', 'Reweigh of voided ticket' FROM dbo.Vehicles v WHERE v.Id = 7;
 INSERT INTO dbo.WeighTickets (Id, TicketNumber, TicketDate, VehicleId, CustomerId, ProductId, GrossWeight, TareWeight, PricePerTonne, Subtotal, Gst, Total, Status, Notes)
