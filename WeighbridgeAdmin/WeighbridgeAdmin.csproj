@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
+    <PackageReference Include="DevExpress.Win.Grid" Version="26.1.4" />
   </ItemGroup>
 
   <ItemGroup>

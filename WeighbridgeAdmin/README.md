@@ -21,6 +21,7 @@ through plain ADO.NET.
 | .NET Framework 4.8 runtime | Needed to **run** the exe. Ships with Windows 10 1903+ / Windows 11 |
 | SQL Server | The shipped `app.config` points at a local **SQL Server Express** instance (`localhost\SQLEXPRESS`). LocalDB works just as well — see the alternative below |
 | `sqlcmd` or SQL Server Management Studio (SSMS) | To run the create script |
+| DevExpress WinForms 26.1 | The two list screens use `GridControl`. Restored from the local NuGet feed the DevExpress installer registers — confirm it with `dotnet nuget list source` |
 
 Open `WeighbridgeAdmin.sln` in the repository root, or the `WeighbridgeAdmin.csproj` in this folder — both work.
 
@@ -145,6 +146,10 @@ Release build:
 dotnet build WeighbridgeAdmin.csproj -c Release
 ```
 
+> **`warning DX1000` whenever the project actually compiles** means DevExpress is running on an evaluation
+> licence rather than a registered one. The build still succeeds; the app shows a
+> trial notice at runtime and must not be redistributed until a licence is registered.
+
 ### If it does not start
 
 A dialog reading *"The configuration file is not valid"* means a setting could not be read — most
@@ -224,11 +229,19 @@ The screen is read-only by design — a saved ticket is an accounting document, 
 or delete. Correcting one means voiding it and re-weighing, which is what the demo data shows
 (`WB100006` voided, reweighed as `WB100007`).
 
+Both list screens are DevExpress `GridControl`s, so on top of the filters above every column
+carries its own header filter and sort, the group panel across the top groups by any column you
+drag into it, and right-clicking a header offers the column chooser. None of that is wired to the
+repository — it all runs against the rows already fetched.
+
 ### Customer list
 
 `F5` refresh, `F2` edit, `Insert` new, double-click a row to edit. The search box filters on every
 keystroke against code and name. Deleting a customer is blocked if any vehicle or weigh ticket
 still references it — mark it inactive instead.
+
+The same grid features apply here: header filters, sorting, and grouping by dragging a column
+header onto the group panel.
 
 ---
 
@@ -252,11 +265,11 @@ Data/
 
 Forms/
   MainForm.*                 MDI parent: menu, status bar, clock timer
-  CustomerListForm.*         Customer browse grid + toolbar + search
+  CustomerListForm.*         Customer browse grid (DevExpress GridControl) + toolbar + search
   CustomerEditForm.*         Add/edit customer dialog with ErrorProvider validation
   VehicleLookupDialog.*      The "F4 lookup" dialog
   WeighTicketForm.*          Four-tab weigh ticket wizard
-  TicketListForm.*           Read-only ticket browse grid with filters and totals
+  TicketListForm.*           Read-only ticket browse grid (DevExpress GridControl) with filters and totals
 
 Database/
   CreateDatabase.sql         Drop/create all tables + demo data (copied to output)

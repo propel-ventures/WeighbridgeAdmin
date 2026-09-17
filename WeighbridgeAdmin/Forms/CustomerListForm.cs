@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
+using DevExpress.XtraGrid.Views.Grid.ViewInfo;
 using WeighbridgeAdmin.Data;
 using WeighbridgeAdmin.Model;
 
@@ -50,11 +51,7 @@ namespace WeighbridgeAdmin.Forms
 
         private Customer GetSelectedCustomer()
         {
-            if (this.grdCustomers.CurrentRow == null)
-            {
-                return null;
-            }
-            return this.grdCustomers.CurrentRow.DataBoundItem as Customer;
+            return this.gvCustomers.GetFocusedRow() as Customer;
         }
 
         private void tbbNew_Click(object sender, EventArgs e)
@@ -126,11 +123,14 @@ namespace WeighbridgeAdmin.Forms
             ReloadGrid();
         }
 
-        private void grdCustomers_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        private void gvCustomers_DoubleClick(object sender, EventArgs e)
         {
-            if (e.RowIndex < 0)
+            // Only a data row counts - double-clicking a column header or the
+            // group panel must not open the editor.
+            GridHitInfo hit = this.gvCustomers.CalcHitInfo(
+                this.grdCustomers.PointToClient(Control.MousePosition));
+            if (!hit.InRow && !hit.InRowCell)
             {
-                // Header row was double clicked - ignore it.
                 return;
             }
             tbbEdit_Click(sender, EventArgs.Empty);

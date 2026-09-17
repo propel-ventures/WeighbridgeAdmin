@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
+using DevExpress.XtraGrid.Views.Grid;
+using DevExpress.XtraGrid.Views.Grid.ViewInfo;
 using WeighbridgeAdmin.Data;
 using WeighbridgeAdmin.Model;
 
@@ -92,7 +94,6 @@ namespace WeighbridgeAdmin.Forms
 
             this.lblRecordCount.Text = list.Count.ToString() + " ticket(s)";
 
-            ColourRows(list);
             ShowTotals(list);
 
             this.tbbView.Enabled = (list.Count > 0);
@@ -110,30 +111,24 @@ namespace WeighbridgeAdmin.Forms
 
         /// <summary>
         /// Void tickets grey out and open ones go amber, so a part finished day
-        /// stands out from the completed work.
+        /// stands out from the completed work.  The grid raises this per visible
+        /// row, so there is no pass over the data after every reload.
         /// </summary>
-        private void ColourRows(List<WeighTicketSummary> list)
+        private void gvTickets_RowStyle(object sender, RowStyleEventArgs e)
         {
-            for (int i = 0; i < this.grdTickets.Rows.Count; i++)
+            WeighTicketSummary s = this.gvTickets.GetRow(e.RowHandle) as WeighTicketSummary;
+            if (s == null)
             {
-                WeighTicketSummary s = this.grdTickets.Rows[i].DataBoundItem as WeighTicketSummary;
-                if (s == null)
-                {
-                    continue;
-                }
+                return;
+            }
 
-                if (s.Status == TicketStatus.Void)
-                {
-                    this.grdTickets.Rows[i].DefaultCellStyle.ForeColor = Color.Gray;
-                }
-                else if (s.Status == TicketStatus.Open)
-                {
-                    this.grdTickets.Rows[i].DefaultCellStyle.ForeColor = Color.FromArgb(160, 80, 0);
-                }
-                else
-                {
-                    this.grdTickets.Rows[i].DefaultCellStyle.ForeColor = Color.Black;
-                }
+            if (s.Status == TicketStatus.Void)
+            {
+                e.Appearance.ForeColor = Color.Gray;
+            }
+            else if (s.Status == TicketStatus.Open)
+            {
+                e.Appearance.ForeColor = Color.FromArgb(160, 80, 0);
             }
         }
 
@@ -204,11 +199,7 @@ namespace WeighbridgeAdmin.Forms
 
         private WeighTicketSummary GetSelectedTicket()
         {
-            if (this.grdTickets.CurrentRow == null)
-            {
-                return null;
-            }
-            return this.grdTickets.CurrentRow.DataBoundItem as WeighTicketSummary;
+            return this.gvTickets.GetFocusedRow() as WeighTicketSummary;
         }
 
         private void tbbView_Click(object sender, EventArgs e)
@@ -264,11 +255,14 @@ namespace WeighbridgeAdmin.Forms
             ReloadGrid();
         }
 
-        private void grdTickets_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        private void gvTickets_DoubleClick(object sender, EventArgs e)
         {
-            if (e.RowIndex < 0)
+            // Only a data row counts - double-clicking a column header or the
+            // group panel must not open the ticket.
+            GridHitInfo hit = this.gvTickets.CalcHitInfo(
+                this.grdTickets.PointToClient(Control.MousePosition));
+            if (!hit.InRow && !hit.InRowCell)
             {
-                // Header row - ignore.
                 return;
             }
             tbbView_Click(sender, EventArgs.Empty);

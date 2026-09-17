@@ -29,13 +29,6 @@ namespace WeighbridgeAdmin.Forms
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
-            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle1 = new System.Windows.Forms.DataGridViewCellStyle();
-            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle2 = new System.Windows.Forms.DataGridViewCellStyle();
-            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle3 = new System.Windows.Forms.DataGridViewCellStyle();
-            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle4 = new System.Windows.Forms.DataGridViewCellStyle();
-            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle5 = new System.Windows.Forms.DataGridViewCellStyle();
-            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle6 = new System.Windows.Forms.DataGridViewCellStyle();
-            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle7 = new System.Windows.Forms.DataGridViewCellStyle();
             this.pnlHeader = new System.Windows.Forms.Panel();
             this.lblHeaderSub = new System.Windows.Forms.Label();
             this.lblHeader = new System.Windows.Forms.Label();
@@ -58,26 +51,28 @@ namespace WeighbridgeAdmin.Forms
             this.chkDateRange = new System.Windows.Forms.CheckBox();
             this.pnlTotals = new System.Windows.Forms.Panel();
             this.lblTotals = new System.Windows.Forms.Label();
-            this.grdTickets = new System.Windows.Forms.DataGridView();
-            this.colTicketNumber = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colTicketDate = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colRegistration = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colCustomerName = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colProductName = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colGross = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colTare = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colNet = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colRate = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colSubtotal = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colGst = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colTotal = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colStatus = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.grdTickets = new DevExpress.XtraGrid.GridControl();
+            this.gvTickets = new DevExpress.XtraGrid.Views.Grid.GridView();
+            this.colTicketNumber = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colTicketDate = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colRegistration = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colCustomerName = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colProductName = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colGross = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colTare = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colNet = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colRate = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colSubtotal = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colGst = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colTotal = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.colStatus = new DevExpress.XtraGrid.Columns.GridColumn();
             this.bsTickets = new System.Windows.Forms.BindingSource(this.components);
             this.pnlHeader.SuspendLayout();
             this.tlbMain.SuspendLayout();
             this.pnlFilter.SuspendLayout();
             this.pnlTotals.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.grdTickets)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.gvTickets)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.bsTickets)).BeginInit();
             this.SuspendLayout();
             //
@@ -328,25 +323,19 @@ namespace WeighbridgeAdmin.Forms
             //
             // grdTickets
             //
-            this.grdTickets.AllowUserToAddRows = false;
-            this.grdTickets.AllowUserToDeleteRows = false;
-            this.grdTickets.AllowUserToResizeRows = false;
-            dataGridViewCellStyle1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(245)))), ((int)(((byte)(245)))), ((int)(((byte)(245)))));
-            this.grdTickets.AlternatingRowsDefaultCellStyle = dataGridViewCellStyle1;
-            this.grdTickets.AutoGenerateColumns = false;
-            this.grdTickets.BackgroundColor = System.Drawing.Color.FromArgb(((int)(((byte)(240)))), ((int)(((byte)(240)))), ((int)(((byte)(240)))));
-            this.grdTickets.BorderStyle = System.Windows.Forms.BorderStyle.Fixed3D;
-            this.grdTickets.CellBorderStyle = System.Windows.Forms.DataGridViewCellBorderStyle.SingleHorizontal;
-            this.grdTickets.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-            dataGridViewCellStyle2.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleLeft;
-            dataGridViewCellStyle2.BackColor = System.Drawing.SystemColors.Control;
-            dataGridViewCellStyle2.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            dataGridViewCellStyle2.ForeColor = System.Drawing.Color.Navy;
-            dataGridViewCellStyle2.SelectionBackColor = System.Drawing.SystemColors.Control;
-            dataGridViewCellStyle2.SelectionForeColor = System.Drawing.Color.Navy;
-            dataGridViewCellStyle2.WrapMode = System.Windows.Forms.DataGridViewTriState.False;
-            this.grdTickets.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle2;
-            this.grdTickets.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
+            this.grdTickets.DataSource = this.bsTickets;
+            this.grdTickets.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.grdTickets.Location = new System.Drawing.Point(0, 137);
+            this.grdTickets.MainView = this.gvTickets;
+            this.grdTickets.Name = "grdTickets";
+            this.grdTickets.Size = new System.Drawing.Size(1000, 398);
+            this.grdTickets.TabIndex = 3;
+            this.grdTickets.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
+            this.gvTickets});
+            //
+            // gvTickets
+            //
+            this.gvTickets.Columns.AddRange(new DevExpress.XtraGrid.Columns.GridColumn[] {
             this.colTicketNumber,
             this.colTicketDate,
             this.colRegistration,
@@ -360,151 +349,164 @@ namespace WeighbridgeAdmin.Forms
             this.colGst,
             this.colTotal,
             this.colStatus});
-            this.grdTickets.DataSource = this.bsTickets;
-            dataGridViewCellStyle3.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleLeft;
-            dataGridViewCellStyle3.BackColor = System.Drawing.Color.White;
-            dataGridViewCellStyle3.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            dataGridViewCellStyle3.ForeColor = System.Drawing.Color.Black;
-            dataGridViewCellStyle3.SelectionBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(49)))), ((int)(((byte)(106)))), ((int)(((byte)(197)))));
-            dataGridViewCellStyle3.SelectionForeColor = System.Drawing.Color.White;
-            dataGridViewCellStyle3.WrapMode = System.Windows.Forms.DataGridViewTriState.False;
-            this.grdTickets.DefaultCellStyle = dataGridViewCellStyle3;
-            this.grdTickets.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.grdTickets.EditMode = System.Windows.Forms.DataGridViewEditMode.EditProgrammatically;
-            this.grdTickets.Location = new System.Drawing.Point(0, 137);
-            this.grdTickets.MultiSelect = false;
-            this.grdTickets.Name = "grdTickets";
-            this.grdTickets.ReadOnly = true;
-            this.grdTickets.RowHeadersWidth = 24;
-            this.grdTickets.RowTemplate.Height = 18;
-            this.grdTickets.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.grdTickets.Size = new System.Drawing.Size(1000, 398);
-            this.grdTickets.TabIndex = 3;
-            this.grdTickets.CellDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.grdTickets_CellDoubleClick);
+            this.gvTickets.GridControl = this.grdTickets;
+            this.gvTickets.Name = "gvTickets";
+            this.gvTickets.OptionsBehavior.Editable = false;
+            this.gvTickets.OptionsView.ColumnAutoWidth = false;
+            this.gvTickets.OptionsView.EnableAppearanceEvenRow = true;
+            this.gvTickets.OptionsView.ShowGroupPanel = true;
+            this.gvTickets.DoubleClick += new System.EventHandler(this.gvTickets_DoubleClick);
+            this.gvTickets.RowStyle += new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(this.gvTickets_RowStyle);
             //
             // colTicketNumber
             //
-            this.colTicketNumber.DataPropertyName = "TicketNumber";
-            this.colTicketNumber.HeaderText = "Ticket No.";
+            this.colTicketNumber.Caption = "Ticket No.";
+            this.colTicketNumber.FieldName = "TicketNumber";
             this.colTicketNumber.Name = "colTicketNumber";
-            this.colTicketNumber.ReadOnly = true;
+            this.colTicketNumber.Visible = true;
+            this.colTicketNumber.VisibleIndex = 0;
             this.colTicketNumber.Width = 80;
             //
             // colTicketDate
             //
-            this.colTicketDate.DataPropertyName = "TicketDate";
-            dataGridViewCellStyle4.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleCenter;
-            dataGridViewCellStyle4.Format = "dd/MM/yyyy";
-            dataGridViewCellStyle4.NullValue = null;
-            this.colTicketDate.DefaultCellStyle = dataGridViewCellStyle4;
-            this.colTicketDate.HeaderText = "Date";
+            this.colTicketDate.AppearanceCell.Options.UseTextOptions = true;
+            this.colTicketDate.AppearanceCell.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Center;
+            this.colTicketDate.Caption = "Date";
+            this.colTicketDate.DisplayFormat.FormatString = "dd/MM/yyyy";
+            this.colTicketDate.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            this.colTicketDate.FieldName = "TicketDate";
             this.colTicketDate.Name = "colTicketDate";
-            this.colTicketDate.ReadOnly = true;
+            this.colTicketDate.Visible = true;
+            this.colTicketDate.VisibleIndex = 1;
             this.colTicketDate.Width = 78;
             //
             // colRegistration
             //
-            this.colRegistration.DataPropertyName = "Registration";
-            this.colRegistration.HeaderText = "Rego";
+            this.colRegistration.Caption = "Rego";
+            this.colRegistration.FieldName = "Registration";
             this.colRegistration.Name = "colRegistration";
-            this.colRegistration.ReadOnly = true;
+            this.colRegistration.Visible = true;
+            this.colRegistration.VisibleIndex = 2;
             this.colRegistration.Width = 72;
             //
             // colCustomerName
             //
-            this.colCustomerName.DataPropertyName = "CustomerName";
-            this.colCustomerName.HeaderText = "Customer";
+            this.colCustomerName.Caption = "Customer";
+            this.colCustomerName.FieldName = "CustomerName";
             this.colCustomerName.Name = "colCustomerName";
-            this.colCustomerName.ReadOnly = true;
+            this.colCustomerName.Visible = true;
+            this.colCustomerName.VisibleIndex = 3;
             this.colCustomerName.Width = 165;
             //
             // colProductName
             //
-            this.colProductName.DataPropertyName = "ProductName";
-            this.colProductName.HeaderText = "Product";
+            this.colProductName.Caption = "Product";
+            this.colProductName.FieldName = "ProductName";
             this.colProductName.Name = "colProductName";
-            this.colProductName.ReadOnly = true;
+            this.colProductName.Visible = true;
+            this.colProductName.VisibleIndex = 4;
             this.colProductName.Width = 130;
             //
             // colGross
             //
-            this.colGross.DataPropertyName = "GrossWeight";
-            dataGridViewCellStyle5.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleRight;
-            dataGridViewCellStyle5.Format = "N0";
-            dataGridViewCellStyle5.NullValue = null;
-            this.colGross.DefaultCellStyle = dataGridViewCellStyle5;
-            this.colGross.HeaderText = "Gross kg";
+            this.colGross.AppearanceCell.Options.UseTextOptions = true;
+            this.colGross.AppearanceCell.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Far;
+            this.colGross.Caption = "Gross kg";
+            this.colGross.DisplayFormat.FormatString = "n0";
+            this.colGross.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.colGross.FieldName = "GrossWeight";
             this.colGross.Name = "colGross";
-            this.colGross.ReadOnly = true;
+            this.colGross.Visible = true;
+            this.colGross.VisibleIndex = 5;
             this.colGross.Width = 68;
             //
             // colTare
             //
-            this.colTare.DataPropertyName = "TareWeight";
-            this.colTare.DefaultCellStyle = dataGridViewCellStyle5;
-            this.colTare.HeaderText = "Tare kg";
+            this.colTare.AppearanceCell.Options.UseTextOptions = true;
+            this.colTare.AppearanceCell.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Far;
+            this.colTare.Caption = "Tare kg";
+            this.colTare.DisplayFormat.FormatString = "n0";
+            this.colTare.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.colTare.FieldName = "TareWeight";
             this.colTare.Name = "colTare";
-            this.colTare.ReadOnly = true;
+            this.colTare.Visible = true;
+            this.colTare.VisibleIndex = 6;
             this.colTare.Width = 64;
             //
             // colNet
             //
-            this.colNet.DataPropertyName = "NetWeight";
-            this.colNet.DefaultCellStyle = dataGridViewCellStyle5;
-            this.colNet.HeaderText = "Net kg";
+            this.colNet.AppearanceCell.Options.UseTextOptions = true;
+            this.colNet.AppearanceCell.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Far;
+            this.colNet.Caption = "Net kg";
+            this.colNet.DisplayFormat.FormatString = "n0";
+            this.colNet.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.colNet.FieldName = "NetWeight";
             this.colNet.Name = "colNet";
-            this.colNet.ReadOnly = true;
+            this.colNet.Visible = true;
+            this.colNet.VisibleIndex = 7;
             this.colNet.Width = 64;
             //
             // colRate
             //
-            this.colRate.DataPropertyName = "PricePerTonne";
-            dataGridViewCellStyle6.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleRight;
-            dataGridViewCellStyle6.Format = "N2";
-            dataGridViewCellStyle6.NullValue = null;
-            this.colRate.DefaultCellStyle = dataGridViewCellStyle6;
-            this.colRate.HeaderText = "Rate";
+            this.colRate.AppearanceCell.Options.UseTextOptions = true;
+            this.colRate.AppearanceCell.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Far;
+            this.colRate.Caption = "Rate";
+            this.colRate.DisplayFormat.FormatString = "n2";
+            this.colRate.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.colRate.FieldName = "PricePerTonne";
             this.colRate.Name = "colRate";
-            this.colRate.ReadOnly = true;
+            this.colRate.Visible = true;
+            this.colRate.VisibleIndex = 8;
             this.colRate.Width = 58;
             //
             // colSubtotal
             //
-            this.colSubtotal.DataPropertyName = "Subtotal";
-            this.colSubtotal.DefaultCellStyle = dataGridViewCellStyle6;
-            this.colSubtotal.HeaderText = "Subtotal";
+            this.colSubtotal.AppearanceCell.Options.UseTextOptions = true;
+            this.colSubtotal.AppearanceCell.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Far;
+            this.colSubtotal.Caption = "Subtotal";
+            this.colSubtotal.DisplayFormat.FormatString = "n2";
+            this.colSubtotal.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.colSubtotal.FieldName = "Subtotal";
             this.colSubtotal.Name = "colSubtotal";
-            this.colSubtotal.ReadOnly = true;
+            this.colSubtotal.Visible = true;
+            this.colSubtotal.VisibleIndex = 9;
             this.colSubtotal.Width = 72;
             //
             // colGst
             //
-            this.colGst.DataPropertyName = "Gst";
-            this.colGst.DefaultCellStyle = dataGridViewCellStyle6;
-            this.colGst.HeaderText = "G.S.T.";
+            this.colGst.AppearanceCell.Options.UseTextOptions = true;
+            this.colGst.AppearanceCell.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Far;
+            this.colGst.Caption = "G.S.T.";
+            this.colGst.DisplayFormat.FormatString = "n2";
+            this.colGst.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.colGst.FieldName = "Gst";
             this.colGst.Name = "colGst";
-            this.colGst.ReadOnly = true;
+            this.colGst.Visible = true;
+            this.colGst.VisibleIndex = 10;
             this.colGst.Width = 62;
             //
             // colTotal
             //
-            this.colTotal.DataPropertyName = "Total";
-            dataGridViewCellStyle7.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleRight;
-            dataGridViewCellStyle7.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            dataGridViewCellStyle7.Format = "N2";
-            dataGridViewCellStyle7.NullValue = null;
-            this.colTotal.DefaultCellStyle = dataGridViewCellStyle7;
-            this.colTotal.HeaderText = "Total";
+            this.colTotal.AppearanceCell.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold);
+            this.colTotal.AppearanceCell.Options.UseFont = true;
+            this.colTotal.AppearanceCell.Options.UseTextOptions = true;
+            this.colTotal.AppearanceCell.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Far;
+            this.colTotal.Caption = "Total";
+            this.colTotal.DisplayFormat.FormatString = "n2";
+            this.colTotal.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.colTotal.FieldName = "Total";
             this.colTotal.Name = "colTotal";
-            this.colTotal.ReadOnly = true;
+            this.colTotal.Visible = true;
+            this.colTotal.VisibleIndex = 11;
             this.colTotal.Width = 78;
             //
             // colStatus
             //
-            this.colStatus.DataPropertyName = "Status";
-            this.colStatus.HeaderText = "Status";
+            this.colStatus.Caption = "Status";
+            this.colStatus.FieldName = "Status";
             this.colStatus.Name = "colStatus";
-            this.colStatus.ReadOnly = true;
+            this.colStatus.Visible = true;
+            this.colStatus.VisibleIndex = 12;
             this.colStatus.Width = 70;
             //
             // bsTickets
@@ -539,6 +541,7 @@ namespace WeighbridgeAdmin.Forms
             this.pnlFilter.PerformLayout();
             this.pnlTotals.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.grdTickets)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.gvTickets)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.bsTickets)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
@@ -568,20 +571,21 @@ namespace WeighbridgeAdmin.Forms
         private System.Windows.Forms.Label lblRecordCount;
         private System.Windows.Forms.Panel pnlTotals;
         private System.Windows.Forms.Label lblTotals;
-        private System.Windows.Forms.DataGridView grdTickets;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colTicketNumber;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colTicketDate;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colRegistration;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colCustomerName;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colProductName;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colGross;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colTare;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colNet;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colRate;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colSubtotal;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colGst;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colTotal;
-        private System.Windows.Forms.DataGridViewTextBoxColumn colStatus;
+        private DevExpress.XtraGrid.GridControl grdTickets;
+        private DevExpress.XtraGrid.Views.Grid.GridView gvTickets;
+        private DevExpress.XtraGrid.Columns.GridColumn colTicketNumber;
+        private DevExpress.XtraGrid.Columns.GridColumn colTicketDate;
+        private DevExpress.XtraGrid.Columns.GridColumn colRegistration;
+        private DevExpress.XtraGrid.Columns.GridColumn colCustomerName;
+        private DevExpress.XtraGrid.Columns.GridColumn colProductName;
+        private DevExpress.XtraGrid.Columns.GridColumn colGross;
+        private DevExpress.XtraGrid.Columns.GridColumn colTare;
+        private DevExpress.XtraGrid.Columns.GridColumn colNet;
+        private DevExpress.XtraGrid.Columns.GridColumn colRate;
+        private DevExpress.XtraGrid.Columns.GridColumn colSubtotal;
+        private DevExpress.XtraGrid.Columns.GridColumn colGst;
+        private DevExpress.XtraGrid.Columns.GridColumn colTotal;
+        private DevExpress.XtraGrid.Columns.GridColumn colStatus;
         private System.Windows.Forms.BindingSource bsTickets;
     }
 }
