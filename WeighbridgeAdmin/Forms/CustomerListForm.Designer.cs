@@ -225,9 +225,10 @@ namespace WeighbridgeAdmin.Forms
             this.colIsActive});
             this.gvCustomers.GridControl = this.grdCustomers;
             this.gvCustomers.Name = "gvCustomers";
-            this.gvCustomers.OptionsBehavior.Editable = false;
+            this.gvCustomers.OptionsBehavior.ReadOnly = true;
             this.gvCustomers.OptionsView.ColumnAutoWidth = false;
             this.gvCustomers.OptionsView.EnableAppearanceEvenRow = true;
+            this.gvCustomers.OptionsView.ShowAutoFilterRow = true;
             this.gvCustomers.OptionsView.ShowGroupPanel = true;
             this.gvCustomers.DoubleClick += new System.EventHandler(this.gvCustomers_DoubleClick);
             //
@@ -236,6 +237,8 @@ namespace WeighbridgeAdmin.Forms
             this.colCode.Caption = "Code";
             this.colCode.FieldName = "Code";
             this.colCode.Name = "colCode";
+            this.colCode.OptionsColumn.AllowEdit = false;
+            this.colCode.OptionsColumn.ReadOnly = true;
             this.colCode.Visible = true;
             this.colCode.VisibleIndex = 0;
             this.colCode.Width = 75;
@@ -245,6 +248,8 @@ namespace WeighbridgeAdmin.Forms
             this.colName.Caption = "Customer Name";
             this.colName.FieldName = "Name";
             this.colName.Name = "colName";
+            this.colName.OptionsColumn.AllowEdit = false;
+            this.colName.OptionsColumn.ReadOnly = true;
             this.colName.Visible = true;
             this.colName.VisibleIndex = 1;
             this.colName.Width = 230;
@@ -254,6 +259,8 @@ namespace WeighbridgeAdmin.Forms
             this.colSuburb.Caption = "Suburb";
             this.colSuburb.FieldName = "Suburb";
             this.colSuburb.Name = "colSuburb";
+            this.colSuburb.OptionsColumn.AllowEdit = false;
+            this.colSuburb.OptionsColumn.ReadOnly = true;
             this.colSuburb.Visible = true;
             this.colSuburb.VisibleIndex = 2;
             this.colSuburb.Width = 120;
@@ -263,6 +270,8 @@ namespace WeighbridgeAdmin.Forms
             this.colState.Caption = "St";
             this.colState.FieldName = "State";
             this.colState.Name = "colState";
+            this.colState.OptionsColumn.AllowEdit = false;
+            this.colState.OptionsColumn.ReadOnly = true;
             this.colState.Visible = true;
             this.colState.VisibleIndex = 3;
             this.colState.Width = 40;
@@ -272,6 +281,8 @@ namespace WeighbridgeAdmin.Forms
             this.colPostcode.Caption = "P/Code";
             this.colPostcode.FieldName = "Postcode";
             this.colPostcode.Name = "colPostcode";
+            this.colPostcode.OptionsColumn.AllowEdit = false;
+            this.colPostcode.OptionsColumn.ReadOnly = true;
             this.colPostcode.Visible = true;
             this.colPostcode.VisibleIndex = 4;
             this.colPostcode.Width = 55;
@@ -281,6 +292,8 @@ namespace WeighbridgeAdmin.Forms
             this.colPhone.Caption = "Phone";
             this.colPhone.FieldName = "Phone";
             this.colPhone.Name = "colPhone";
+            this.colPhone.OptionsColumn.AllowEdit = false;
+            this.colPhone.OptionsColumn.ReadOnly = true;
             this.colPhone.Visible = true;
             this.colPhone.VisibleIndex = 5;
             this.colPhone.Width = 105;
@@ -294,6 +307,8 @@ namespace WeighbridgeAdmin.Forms
             this.colCreditLimit.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             this.colCreditLimit.FieldName = "CreditLimit";
             this.colCreditLimit.Name = "colCreditLimit";
+            this.colCreditLimit.OptionsColumn.AllowEdit = false;
+            this.colCreditLimit.OptionsColumn.ReadOnly = true;
             this.colCreditLimit.Visible = true;
             this.colCreditLimit.VisibleIndex = 6;
             this.colCreditLimit.Width = 85;
@@ -304,6 +319,8 @@ namespace WeighbridgeAdmin.Forms
             this.colIsActive.ColumnEdit = this.riIsActive;
             this.colIsActive.FieldName = "IsActive";
             this.colIsActive.Name = "colIsActive";
+            this.colIsActive.OptionsColumn.AllowEdit = false;
+            this.colIsActive.OptionsColumn.ReadOnly = true;
             this.colIsActive.Visible = true;
             this.colIsActive.VisibleIndex = 7;
             this.colIsActive.Width = 45;

@@ -229,10 +229,20 @@ The screen is read-only by design — a saved ticket is an accounting document, 
 or delete. Correcting one means voiding it and re-weighing, which is what the demo data shows
 (`WB100006` voided, reweighed as `WB100007`).
 
-Both list screens are DevExpress `GridControl`s, so on top of the filters above every column
-carries its own header filter and sort, the group panel across the top groups by any column you
-drag into it, and right-clicking a header offers the column chooser. None of that is wired to the
-repository — it all runs against the rows already fetched.
+Both list screens are DevExpress `GridControl`s, so on top of the filters above there is a filter
+row under the column headers, every column carries its own header filter and sort, the group panel
+across the top groups by any column you drag into it, and right-clicking a header offers the column
+chooser. None of that is wired to the repository — it all runs against the rows already fetched.
+
+The cells themselves stay read-only: every `GridColumn` sets `OptionsColumn.AllowEdit = false` and
+`OptionsColumn.ReadOnly = true`, and the views set `OptionsBehavior.ReadOnly`. The view-wide
+`OptionsBehavior.Editable = false` would be the shorter way to say it, but it also hides the filter
+row, which is why the read-only flags sit on the columns instead.
+
+The look comes from the **WXI** skin, selected in `Program.cs`. DevExpress otherwise starts on its
+`Basic` skin, which is deliberately plain and looks almost exactly like the `DataGridView` it
+replaced — change that one string to try another (`The Bezier`, `Office 2019 Colorful`,
+`Visual Studio 2013 Blue`, and about twenty more).
 
 ### Customer list
 

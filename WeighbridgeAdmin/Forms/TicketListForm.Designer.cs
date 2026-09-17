@@ -351,9 +351,10 @@ namespace WeighbridgeAdmin.Forms
             this.colStatus});
             this.gvTickets.GridControl = this.grdTickets;
             this.gvTickets.Name = "gvTickets";
-            this.gvTickets.OptionsBehavior.Editable = false;
+            this.gvTickets.OptionsBehavior.ReadOnly = true;
             this.gvTickets.OptionsView.ColumnAutoWidth = false;
             this.gvTickets.OptionsView.EnableAppearanceEvenRow = true;
+            this.gvTickets.OptionsView.ShowAutoFilterRow = true;
             this.gvTickets.OptionsView.ShowGroupPanel = true;
             this.gvTickets.DoubleClick += new System.EventHandler(this.gvTickets_DoubleClick);
             this.gvTickets.RowStyle += new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(this.gvTickets_RowStyle);
@@ -363,6 +364,8 @@ namespace WeighbridgeAdmin.Forms
             this.colTicketNumber.Caption = "Ticket No.";
             this.colTicketNumber.FieldName = "TicketNumber";
             this.colTicketNumber.Name = "colTicketNumber";
+            this.colTicketNumber.OptionsColumn.AllowEdit = false;
+            this.colTicketNumber.OptionsColumn.ReadOnly = true;
             this.colTicketNumber.Visible = true;
             this.colTicketNumber.VisibleIndex = 0;
             this.colTicketNumber.Width = 80;
@@ -376,6 +379,8 @@ namespace WeighbridgeAdmin.Forms
             this.colTicketDate.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
             this.colTicketDate.FieldName = "TicketDate";
             this.colTicketDate.Name = "colTicketDate";
+            this.colTicketDate.OptionsColumn.AllowEdit = false;
+            this.colTicketDate.OptionsColumn.ReadOnly = true;
             this.colTicketDate.Visible = true;
             this.colTicketDate.VisibleIndex = 1;
             this.colTicketDate.Width = 78;
@@ -385,6 +390,8 @@ namespace WeighbridgeAdmin.Forms
             this.colRegistration.Caption = "Rego";
             this.colRegistration.FieldName = "Registration";
             this.colRegistration.Name = "colRegistration";
+            this.colRegistration.OptionsColumn.AllowEdit = false;
+            this.colRegistration.OptionsColumn.ReadOnly = true;
             this.colRegistration.Visible = true;
             this.colRegistration.VisibleIndex = 2;
             this.colRegistration.Width = 72;
@@ -394,6 +401,8 @@ namespace WeighbridgeAdmin.Forms
             this.colCustomerName.Caption = "Customer";
             this.colCustomerName.FieldName = "CustomerName";
             this.colCustomerName.Name = "colCustomerName";
+            this.colCustomerName.OptionsColumn.AllowEdit = false;
+            this.colCustomerName.OptionsColumn.ReadOnly = true;
             this.colCustomerName.Visible = true;
             this.colCustomerName.VisibleIndex = 3;
             this.colCustomerName.Width = 165;
@@ -403,6 +412,8 @@ namespace WeighbridgeAdmin.Forms
             this.colProductName.Caption = "Product";
             this.colProductName.FieldName = "ProductName";
             this.colProductName.Name = "colProductName";
+            this.colProductName.OptionsColumn.AllowEdit = false;
+            this.colProductName.OptionsColumn.ReadOnly = true;
             this.colProductName.Visible = true;
             this.colProductName.VisibleIndex = 4;
             this.colProductName.Width = 130;
@@ -416,6 +427,8 @@ namespace WeighbridgeAdmin.Forms
             this.colGross.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             this.colGross.FieldName = "GrossWeight";
             this.colGross.Name = "colGross";
+            this.colGross.OptionsColumn.AllowEdit = false;
+            this.colGross.OptionsColumn.ReadOnly = true;
             this.colGross.Visible = true;
             this.colGross.VisibleIndex = 5;
             this.colGross.Width = 68;
@@ -429,6 +442,8 @@ namespace WeighbridgeAdmin.Forms
             this.colTare.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             this.colTare.FieldName = "TareWeight";
             this.colTare.Name = "colTare";
+            this.colTare.OptionsColumn.AllowEdit = false;
+            this.colTare.OptionsColumn.ReadOnly = true;
             this.colTare.Visible = true;
             this.colTare.VisibleIndex = 6;
             this.colTare.Width = 64;
@@ -442,6 +457,8 @@ namespace WeighbridgeAdmin.Forms
             this.colNet.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             this.colNet.FieldName = "NetWeight";
             this.colNet.Name = "colNet";
+            this.colNet.OptionsColumn.AllowEdit = false;
+            this.colNet.OptionsColumn.ReadOnly = true;
             this.colNet.Visible = true;
             this.colNet.VisibleIndex = 7;
             this.colNet.Width = 64;
@@ -455,6 +472,8 @@ namespace WeighbridgeAdmin.Forms
             this.colRate.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             this.colRate.FieldName = "PricePerTonne";
             this.colRate.Name = "colRate";
+            this.colRate.OptionsColumn.AllowEdit = false;
+            this.colRate.OptionsColumn.ReadOnly = true;
             this.colRate.Visible = true;
             this.colRate.VisibleIndex = 8;
             this.colRate.Width = 58;
@@ -468,6 +487,8 @@ namespace WeighbridgeAdmin.Forms
             this.colSubtotal.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             this.colSubtotal.FieldName = "Subtotal";
             this.colSubtotal.Name = "colSubtotal";
+            this.colSubtotal.OptionsColumn.AllowEdit = false;
+            this.colSubtotal.OptionsColumn.ReadOnly = true;
             this.colSubtotal.Visible = true;
             this.colSubtotal.VisibleIndex = 9;
             this.colSubtotal.Width = 72;
@@ -481,6 +502,8 @@ namespace WeighbridgeAdmin.Forms
             this.colGst.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             this.colGst.FieldName = "Gst";
             this.colGst.Name = "colGst";
+            this.colGst.OptionsColumn.AllowEdit = false;
+            this.colGst.OptionsColumn.ReadOnly = true;
             this.colGst.Visible = true;
             this.colGst.VisibleIndex = 10;
             this.colGst.Width = 62;
@@ -496,6 +519,8 @@ namespace WeighbridgeAdmin.Forms
             this.colTotal.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             this.colTotal.FieldName = "Total";
             this.colTotal.Name = "colTotal";
+            this.colTotal.OptionsColumn.AllowEdit = false;
+            this.colTotal.OptionsColumn.ReadOnly = true;
             this.colTotal.Visible = true;
             this.colTotal.VisibleIndex = 11;
             this.colTotal.Width = 78;
@@ -505,6 +530,8 @@ namespace WeighbridgeAdmin.Forms
             this.colStatus.Caption = "Status";
             this.colStatus.FieldName = "Status";
             this.colStatus.Name = "colStatus";
+            this.colStatus.OptionsColumn.AllowEdit = false;
+            this.colStatus.OptionsColumn.ReadOnly = true;
             this.colStatus.Visible = true;
             this.colStatus.VisibleIndex = 12;
             this.colStatus.Width = 70;

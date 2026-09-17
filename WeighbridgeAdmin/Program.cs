@@ -1,6 +1,9 @@
 using System;
 using System.Configuration;
+using System.Drawing;
 using System.Windows.Forms;
+using DevExpress.LookAndFeel;
+using DevExpress.XtraEditors;
 using WeighbridgeAdmin.Data;
 using WeighbridgeAdmin.Forms;
 
@@ -16,6 +19,12 @@ namespace WeighbridgeAdmin
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            // DevExpress starts on the "Basic" skin, which is deliberately
+            // plain - the grids look like the DataGridViews they replaced until
+            // a real skin is selected.  One string, changed here, restyles them.
+            WindowsFormsSettings.DefaultFont = new Font("Segoe UI", 9F);
+            UserLookAndFeel.Default.SetSkinStyle("WXI");
 
             // Configuration is read the first time Repository.Current is touched,
             // so a bad config file surfaces here rather than as an unhandled
