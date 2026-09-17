@@ -21,7 +21,7 @@ through plain ADO.NET.
 | .NET Framework 4.8 runtime | Needed to **run** the exe. Ships with Windows 10 1903+ / Windows 11 |
 | SQL Server | The shipped `app.config` points at a local **SQL Server Express** instance (`localhost\SQLEXPRESS`). LocalDB works just as well — see the alternative below |
 | `sqlcmd` or SQL Server Management Studio (SSMS) | To run the create script |
-| DevExpress WinForms 26.1 | The two list screens use `GridControl`. Restored from the local NuGet feed the DevExpress installer registers — confirm it with `dotnet nuget list source` |
+| DevExpress WinForms 26.1 | The two list screens use `GridControl`. `DevExpress.Win.Grid` 26.1.4 restores straight from **nuget.org** — no DevExpress install, feed or account is needed to build. See the licence note under *Build and run* |
 
 Open `WeighbridgeAdmin.sln` in the repository root, or the `WeighbridgeAdmin.csproj` in this folder — both work.
 
@@ -146,9 +146,14 @@ Release build:
 dotnet build WeighbridgeAdmin.csproj -c Release
 ```
 
-> **`warning DX1000` whenever the project actually compiles** means DevExpress is running on an evaluation
-> licence rather than a registered one. The build still succeeds; the app shows a
-> trial notice at runtime and must not be redistributed until a licence is registered.
+> **`warning DX1000` whenever the project actually compiles** means DevExpress is running on an
+> evaluation licence rather than a registered one. The build still succeeds and the app still runs;
+> it shows a trial notice and must not be redistributed until a licence is registered.
+>
+> Licensing is **per developer machine**, not per repository. DevExpress reads it from
+> `%AppData%\DevExpress\DevExpress_License.txt`, written when you register a licence with a
+> DevExpress account. Cloning and building this repo needs neither that file nor an account — a
+> colleague without one builds under the same evaluation terms and sees the same warning.
 
 ### If it does not start
 
