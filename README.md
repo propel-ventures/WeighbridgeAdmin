@@ -13,7 +13,14 @@ Data lives in **SQL Server**, reached through straight ADO.NET — `SqlConnectio
 `SqlCommand`, `SqlDataReader`, inline SQL as string constants, readers mapped onto
 the model classes by hand. No ORM, no Entity Framework, no unit of work, no caching.
 The database ships with 15 customers, 20 vehicles, 8 products and 30 weigh tickets
-of Australian-flavoured dummy data.
+of Australian-flavoured dummy data, plus three security profiles and the three
+operator logins that sit on them.
+
+Authorisation is the period-accurate kind: a `Users` table, a `SecurityProfiles`
+table, a grant row per privilege, a sign-on dialog with no password, and every
+gated command switched off in `Form_Load` **and** checked again inside its event
+handler. See "Security model" below — it is the main thing the conversion has to
+extract as a rule set rather than as UI.
 
 > This README is written for whoever is doing the conversion — what is in here, and why.
 > [`WeighbridgeAdmin/README.md`](WeighbridgeAdmin/README.md) is the setup-facing guide,
@@ -104,29 +111,120 @@ Being explicit, because some of this is tested and some isn't:
 
 | Claim | Status |
 |---|---|
-| `dotnet build` clean from scratch | ✅ 0 warnings, 0 errors |
-| `CreateDatabase.sql` runs without error | ✅ against SQL Server 2022 in Docker |
+| `dotnet build` clean from scratch | ✅ 0 warnings, 0 errors (`-t:Rebuild`, Windows) |
+| `CreateDatabase.sql` runs without error | ✅ SQL Server 2022 in Docker (original schema), and re-verified against SQL Server 2025 Express after the security tables were added |
+| `CreateDatabase.sql` is safe to re-run | ✅ run twice back to back, second pass clean |
 | Seeded data matches the original in-memory values | ✅ all 30 tickets compared field by field |
-| Every SQL statement in `Repository.cs` executes | ⚠️ 19 of 20 — extracted and run in isolated transactions. The ticket-summary query behind `SearchTickets` arrived later with the ticket browse screen and has not been run in isolation. |
+| Every SQL statement in `Repository.cs` executes | ⚠️ 22 of 23 — extracted and run in isolated transactions. The ticket-summary query behind `SearchTickets` arrived later with the ticket browse screen and has not been run in isolation. The three security queries have. |
 | Computed `NetWeight` column agrees with `Gross - Tare` | ✅ 0 mismatching rows |
 | GST-free product yields zero GST | ✅ |
-| The app itself running end to end | ❌ **never run** — WinForms needs Windows |
+| Privilege loading, `HasPrivilege`, `Demand` | ✅ all three profiles driven through `SecurityContext` against the real database; `Demand` throws `UnauthorizedAccessException` carrying the privilege name |
+| Status bar text for each operator | ✅ `D. MCGRATH (Weighbridge Operator)`, `J. REID (Read Only)`, `S. PATEL (Administrator)` |
+| The app starting, signing on and opening `MainForm` | ✅ launched on Windows; the sign-on dialog lists all three operators and shows the profile as you move through the combo |
+| `MainForm` menu enablement per profile | ✅ read off the live menus — Read Only has *New Customer...* and *Tickets → New Weigh Ticket* greyed, the other two do not |
+| `CustomerListForm` toolbar enablement per profile | ✅ read off the live toolbar — New/Edit greyed for Read Only, Delete greyed for everyone except Administrator |
+| `numPrice` read-only without `TICKET_PRICE_OVERRIDE` | ❌ not verified in the running UI — the code sets it in `Form_Load`, but the weigh ticket screen was not driven far enough to read the control back |
+| `WeighTicketForm.btnSave`, `CustomerEditForm.btnOK`, `TicketListForm.tbbView` enablement | ❌ not verified in the running UI |
+| The "Access denied" message box actually appearing | ❌ not verified — `Demand` throwing the right exception is verified, the `MessageBox.Show` that catches it is not |
 | Forms rendering, tab flow, F4 lookup, save round-trip | ❌ not verified |
 
-The data layer is well covered; the UI is not. First run on Windows is still the
-real test — particularly the F4 vehicle lookup and the Save path, which is the only
-place a `WeighTicket` is written.
+The data layer and the privilege model are well covered; most of the UI still is not.
+The sign-on path, the main menu and the customer toolbar have now been seen working on
+Windows. Everything below that — the weigh ticket wizard in particular, which is the only
+place a `WeighTicket` is written and the only place the price rule bites — has not been
+driven by hand.
 
 ## Screen map
 
 | Form | Purpose | Controls of note | POC requirement it exercises |
 |---|---|---|---|
+| **LoginForm** | Shop-floor sign on, shown modally by `Program.Main` before anything else. No password — picking the operator off a dropdown is the whole flow. | `ComboBox` of active users bound to `List<UserAccount>` with `DisplayMember = "FullName"`; a bold profile label rewritten in `SelectedIndexChanged`; Sign In / Exit with `DialogResult`; `FormBorderStyle.FixedDialog`, `MaximizeBox = false`, `StartPosition.CenterScreen`. Nothing here is in a `.resx`. | **Authentication and session bootstrap.** A modal that gates the whole app → route guard / auth provider at the React root. `SecurityContext` static session → auth context. The result is carried out on a public `SelectedUser` property, not raised as an event. |
 | **MainForm** | MDI shell. Entry point for every other screen. | `MenuStrip` (File / Customers / Vehicles / Tickets / Help) with shortcut keys — Ctrl+N new ticket, Ctrl+L ticket list — and `MdiWindowListItem`; `StatusStrip` with a sunken user panel and a spring-filled clock panel; `Timer` component ticking the clock every second; `IsMdiContainer = true`. | Application shell → React app shell + routing/layout. Menu tree → nav. Status bar → persistent header/footer. MDI child windows → tabs, routes or stacked panels (the hardest structural decision in the conversion). Singleton child windows enforced by scanning `MdiChildren` → route identity. |
 | **CustomerListForm** | Browse/search customers. Launch point for add, edit and delete. | `DataGridView` with `AutoGenerateColumns = false` and 8 columns declared in the Designer (incl. a `DataGridViewCheckBoxColumn`), bound through a `BindingSource`; `ToolStrip` with New/Edit/Delete/Refresh; search `TextBox` filtering on `TextChanged`; `CellDoubleClick` opens Edit; `KeyPreview` with F2/F5/Insert shortcuts. | **Simple list screen.** Data grid → React table component. `BindingSource` → client-side state/query. Designer-declared columns → a column config array. Filter-as-you-type → controlled input + derived list. Toolbar command enablement → derived UI state. |
 | **CustomerEditForm** | Modal add/edit dialog, used for both New and Edit. | Labels and `TextBox`es positioned **absolutely** (no `TableLayoutPanel`/`FlowLayoutPanel`); `ComboBox` for State; `ErrorProvider` driving field-level errors; `CheckBox`; OK/Cancel with `DialogResult`; `FormBorderStyle.FixedDialog`, `MaximizeBox = false`. | **Simple add/edit form.** Absolute pixel layout → responsive/flow layout (the layout-inference problem). `ErrorProvider` → form validation library + inline error display. Modal `ShowDialog` + `DialogResult` → React modal with a promise/callback result. |
 | **VehicleLookupDialog** | The reusable "F4 lookup" pattern: search, pick, return. | Search `TextBox` filtering on every keystroke; read-only `DataGridView` populated **row by row in code** with the `Vehicle` parked on `DataGridViewRow.Tag`; Select/Cancel; result handed back via the public `SelectedVehicle` property; optional `InitialSearchText` input property; inactive vehicles greyed out and confirmed before use. | **Lookup/picker dialog pattern.** Public in/out properties → component props + `onSelect` callback. Row `.Tag` object smuggling → typed row data. Reused from `WeighTicketForm`, so it proves the converted component is genuinely reusable rather than copy-pasted. |
 | **WeighTicketForm** | The complex screen: a 4-step weigh ticket wizard. | `TabControl` with 4 pages plus Back/Next/Save/Cancel in a docked bottom `Panel`; `NumericUpDown` for gross/tare/price; read-only `Label`s for Net, Subtotal, GST, Total; a red overweight warning `Label`; `DateTimePicker`; three `ComboBox`es (customer, product, status); `"..."` button and F4 both opening `VehicleLookupDialog`; 13 caption/value label pairs on the Review tab; multiline Notes `TextBox`. | **Complex screen.** Wizard navigation with per-step validation → multi-step form. Cross-tab dependencies (vehicle → customer + tare; net → subtotal → GST → total) → derived state. Master-data defaulting that stays editable. Dialog-to-parent data flow. And the big one: **derived values computed in event handlers rather than held in a model** (see below). |
 | **TicketListForm** | Weigh ticket browse. Read only — a saved ticket is an accounting document, so nothing here edits or deletes one. | `DataGridView` with 13 Designer-declared columns bound through a `BindingSource` to `WeighTicketSummary`; a filter strip of `CheckBox` + two `DateTimePicker`s, customer and status `ComboBox`es and a search box, all wired into one shared `Filter_Changed` handler; row fore-colour set per row after every load; a totals `Label` rebuilt as one concatenated string; View/Refresh/Clear Filters `ToolStrip`; F2/F5. | **Filtered list and reporting screen.** Multi-field filter panel → one filter state object driving one query. Sentinel rows (`Id 0` = "(All customers)", index 0 = "(All statuses)") → optional/nullable filter params. Status-driven row colouring → conditional row styling. Footer aggregates computed in the UI → derived/memoised totals. A public `ReloadGrid()` called from two other screens → shared cache invalidation. |
+
+---
+
+## Security model
+
+Three tables, a static session object, and privilege checks copy-pasted into the
+screens. There is no password and no audit trail — this is the authorisation half
+of a legacy LOB app, which is the half a conversion actually has to reproduce.
+
+```
+dbo.SecurityProfiles          ProfileId, ProfileName, Description
+dbo.SecurityProfilePrivileges ProfileId (FK), PrivilegeName      -- one row per grant
+dbo.Users                     UserId, UserName, FullName, ProfileId (FK), IsActive
+```
+
+`Program.Main` shows `LoginForm` after the config and connection checks; on OK it calls
+`SecurityContext.SignIn(user)`, which reads that profile's grant rows once into a
+`HashSet<string>`. Nothing re-reads them, so changing a profile in the database needs a
+restart. `Repository.CurrentUserName` — still the only thing the status bar knows about —
+now composes `FULLNAME (Profile)` out of the session instead of returning a literal.
+
+### Sign in as
+
+| Operator | Profile | Can | Cannot |
+|---|---|---|---|
+| **D. McGrath** (`dmcgrath`) | Weighbridge Operator | Browse customers, add and edit them, look vehicles up, browse tickets, raise and save a new weigh ticket at the price-list rate | Delete a customer; change the price per tonne away from the product default |
+| **S. Patel** (`sadmin`) | Administrator | Everything, including deleting customers and overriding the price per tonne | — |
+| **J. Reid** (`jreid`) | Read Only | Browse customers, look vehicles up, browse and view tickets | Add or edit a customer; delete one; raise a weigh ticket; override a price |
+
+### Privilege → control map
+
+Every gated action is switched off up front **and** checked again inside the handler,
+which is how a real system of this vintage does it — the greyed control is a courtesy,
+the check is the rule.
+
+| Privilege | Form | Control disabled in `Form_Load` | `Demand` in handler |
+|---|---|---|---|
+| `CUSTOMER_VIEW` | MainForm | `mnuCustomersList` | `mnuCustomersList_Click` |
+| `CUSTOMER_EDIT` | MainForm | `mnuCustomersNew` | `mnuCustomersNew_Click` |
+| `CUSTOMER_EDIT` | CustomerListForm | `tbbNew`, `tbbEdit` | `tbbNew_Click`, `tbbEdit_Click` |
+| `CUSTOMER_EDIT` | CustomerEditForm | `btnOK` | `btnOK_Click` |
+| `CUSTOMER_DELETE` | CustomerListForm | `tbbDelete` | `tbbDelete_Click` |
+| `VEHICLE_VIEW` | MainForm | `mnuVehiclesLookup` | `mnuVehiclesLookup_Click` |
+| `TICKET_VIEW` | MainForm | `mnuTicketsList` | `mnuTicketsList_Click` |
+| `TICKET_VIEW` | TicketListForm | `tbbView` | `tbbView_Click` |
+| `TICKET_CREATE` | MainForm | `mnuTicketsNew` | `mnuTicketsNew_Click` |
+| `TICKET_CREATE` | WeighTicketForm | `btnSave` | `btnSave_Click` |
+| `TICKET_PRICE_OVERRIDE` | WeighTicketForm | `numPrice` goes `ReadOnly` (see below) | `btnSave_Click` compares the price against the product default |
+
+A denial that gets past the greying shows
+`MessageBox.Show("You do not have the 'X' privilege.", "Access denied", ...)`.
+
+Three things are worth knowing before the conversion reads too much into the table:
+
+- **`CUSTOMER_VIEW`, `VEHICLE_VIEW` and `TICKET_VIEW` are granted to all three seeded
+  profiles**, so those three gates never actually grey anything for the shipped users.
+  They exist because the rule exists, not because anyone is currently denied. The four
+  privileges that do differentiate are `CUSTOMER_EDIT`, `CUSTOMER_DELETE`,
+  `TICKET_CREATE` and `TICKET_PRICE_OVERRIDE`.
+- **`CustomerEditForm.btnOK` is unreachable belt-and-braces.** Every way into that dialog
+  is already gated on `CUSTOMER_EDIT`, so the check there can only fire if a future
+  screen opens it without checking. Left in deliberately: legacy apps are full of these.
+- **`File → New Weigh Ticket` (and its `Ctrl+N` shortcut) is *not* greyed**, because it is
+  a second menu item — `mnuFileNewTicket` — pointing at the same handler as the gated
+  `mnuTicketsNew`. A Read Only operator can still reach it, and the `Demand` at the top of
+  `mnuTicketsNew_Click` is what stops them. That gap is real legacy behaviour and is the
+  clearest demonstration in the app of why the handler check has to exist at all.
+
+### The conditional read-only field
+
+`WeighTicketForm.numPrice` defaults from the selected product's `PricePerTonne`. Without
+`TICKET_PRICE_OVERRIDE` the `Form_Load` makes it `ReadOnly`, zeroes its `Increment`
+(`ReadOnly` on a `NumericUpDown` still leaves the spin buttons live — a classic way to
+get this wrong) and greys its background. The figure stays visible and still flows into
+subtotal/GST/total.
+
+`btnSave_Click` then checks the **value**, not the control: if the submitted price differs
+from the product default and the operator lacks the privilege, the save is blocked with a
+message box naming the rule. That makes it a field-level, data-dependent rule rather than a
+whole-button gate — the kind that does not survive a naive "disable the button" conversion.
 
 ---
 
@@ -209,16 +307,22 @@ WeighbridgeAdmin/
   README.md                    setup / install / troubleshooting guide
   WeighbridgeAdmin.csproj      net48, UseWindowsForms, EnableWindowsTargeting
   app.config                   supportedRuntime, connection string, appSettings
-  Program.cs                   [STAThread], EnableVisualStyles, Run(new MainForm())
+  Program.cs                   [STAThread], EnableVisualStyles, LoginForm, Run(new MainForm())
   Properties/AssemblyInfo.cs
   Model/
     Customer.cs  Vehicle.cs  Product.cs  WeighTicket.cs   (+ TicketStatus constants)
     WeighTicketSummary.cs      read-only joined ticket row for the browse grid
+    UserAccount.cs             operator login, profile name joined on
+    SecurityProfile.cs         job role  (no callers yet - see "unused members")
+  Security/
+    Privileges.cs              const string per privilege, C# name -> wire name
+    SecurityContext.cs         static signed-on session; SignIn / HasPrivilege / Demand
   Data/
     Repository.cs              singleton, ADO.NET against SQL Server
   Database/
     CreateDatabase.sql         schema + demo data; copied next to the exe on build
   Forms/
+    LoginForm.cs           / .Designer.cs               (no .resx)
     MainForm.cs            / .Designer.cs / .resx
     CustomerListForm.cs    / .Designer.cs / .resx
     CustomerEditForm.cs    / .Designer.cs / .resx
@@ -236,6 +340,8 @@ WeighbridgeAdmin/
 | `Product` | Id, Code, Name, PricePerTonne, GstApplicable |
 | `WeighTicket` | Id, TicketNumber, TicketDate, VehicleId, CustomerId, ProductId, GrossWeight, TareWeight, **NetWeight (derived)**, PricePerTonne, Subtotal, Gst, Total, Notes, Status |
 | `WeighTicketSummary` | The same ticket with Registration, CustomerCode/Name and ProductCode/Name already joined on, plus derived **NetTonnes**. Read only — nothing writes a summary back. It exists so the browse grid fills from one query instead of going back to the database once per row. |
+| `UserAccount` | UserId, UserName, FullName, ProfileId, **ProfileName** (joined on, like the ticket summary), IsActive. No password field — there is no password. |
+| `SecurityProfile` | ProfileId, ProfileName, Description. The privilege grants live in their own table and come back from `GetProfilePrivileges` as a plain `List<string>`, so nothing currently constructs one of these. |
 
 Weights are kilograms; prices are dollars per tonne. `Subtotal = (Net / 1000) × PricePerTonne`,
 `Gst = Subtotal × GstRate` (10% unless `app.config` says otherwise) when the product is taxable,
@@ -259,7 +365,11 @@ drift from the app unless it replicates banker's rounding.
 
 ## Walkthrough
 
-1. Launch — `MainForm` opens maximised, status bar shows the operator and a live clock.
+1. Launch — the **Sign In** dialog comes up first. Pick an operator; the profile shows
+   underneath so you know what the session will be allowed to do. Sign In opens
+   `MainForm` maximised, with the status bar showing that operator and a live clock;
+   Exit closes without starting. Run it three times, once per operator, to see the
+   menus and toolbars change.
 2. **Customers → Customer List** — type in the search box to filter, double-click a row to edit,
    try saving with a blank Code or a 3-digit postcode to see the `ErrorProvider` fire.
 3. **Tickets → New Weigh Ticket** (Ctrl+N) — press **F4** (or the `...` button) in Registration to

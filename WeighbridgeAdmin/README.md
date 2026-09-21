@@ -64,11 +64,13 @@ sqlcmd -S "(localdb)\MSSQLLocalDB" -d WeighbridgeDb -i Database\CreateDatabase.s
 Create a database named `WeighbridgeDb`, then open `Database/CreateDatabase.sql` and execute it
 with that database selected.
 
-> **The script is destructive.** It drops and recreates `WeighTickets`, `Vehicles`, `Products`,
-> `Customers` and `Counters` every time it runs. Re-running it wipes anything you have entered.
+> **The script is destructive.** It drops and recreates `Users`, `SecurityProfilePrivileges`,
+> `SecurityProfiles`, `WeighTickets`, `Vehicles`, `Products`, `Customers` and `Counters` every
+> time it runs. Re-running it wipes anything you have entered.
 
-**What you get:** 15 customers, 8 products, 20 vehicles, 30 weigh tickets, and a `Counters` row
-that starts ticket numbering at `WB100031`.
+**What you get:** 15 customers, 8 products, 20 vehicles, 30 weigh tickets, a `Counters` row
+that starts ticket numbering at `WB100031`, and three operator logins on three security
+profiles (see "Sign in" below).
 
 ---
 
@@ -169,21 +171,48 @@ $cn.Open(); $cn.State; $cn.Close()
 
 ---
 
+## 4. Sign in
+
+The first thing the application shows is a small **Sign In** dialog — before the main window,
+and after the configuration and database checks. There is no password: this is a shop-floor
+terminal, so the operator just picks their own name off the dropdown. The profile that name
+works under appears underneath, and it is what decides which menus, toolbar buttons and
+fields are available for the rest of the session. **Exit** closes without starting the app.
+
+| Pick | Profile | What the session can do |
+|---|---|---|
+| **D. McGrath** | Weighbridge Operator | Customer list, add and edit customers, vehicle lookup, ticket list, raise and save weigh tickets. Delete is greyed. The price per tonne is read-only at the product's price-list rate. |
+| **S. Patel** | Administrator | Everything, including deleting customers and overtyping the price per tonne. |
+| **J. Reid** | Read Only | Customer list, vehicle lookup, ticket list and ticket view. New/Edit/Delete customer and New Weigh Ticket are all greyed. |
+
+Signing in as a different operator means restarting the application — the privileges are read
+once at sign-on and there is no "switch user".
+
+If a command is greyed out, the profile does not grant it. If you reach one anyway — through a
+shortcut key or a double-click that the screen forgot to disable — you get a
+*"You do not have the 'X' privilege."* box instead. Both checks are deliberate.
+
+A dialog reading *"The operator list could not be read"* on start-up means the security tables
+are missing: re-run `Database\CreateDatabase.sql`.
+
+---
+
 ## Using the application
 
 The main window is an MDI parent with a menu bar and a status bar (operator name + live clock).
+What is enabled on it depends on who signed in — see the table above.
 
-| Menu | Item | What it does |
-|---|---|---|
-| File | New Weigh Ticket (`Ctrl+N`) | Opens the weigh ticket wizard |
-| File | Exit | Confirms, then closes |
-| Customers | Customer List | Browsable, searchable customer grid (only one instance is ever opened) |
-| Customers | New Customer... | Add-customer dialog |
-| Vehicles | Vehicle Lookup... | Search dialog; shows the picked vehicle's details |
-| Tickets | New Weigh Ticket | Same as File → New Weigh Ticket |
-| Tickets | Ticket List (`Ctrl+L`) | Browse saved weigh tickets (only one instance is ever opened) |
-| Tickets | Cascade Windows / Tile Horizontally | MDI layout |
-| Help | About... | Version box |
+| Menu | Item | What it does | Privilege |
+|---|---|---|---|
+| File | New Weigh Ticket (`Ctrl+N`) | Opens the weigh ticket wizard | `TICKET_CREATE` — **not** greyed here, only checked in the handler |
+| File | Exit | Confirms, then closes | — |
+| Customers | Customer List | Browsable, searchable customer grid (only one instance is ever opened) | `CUSTOMER_VIEW` |
+| Customers | New Customer... | Add-customer dialog | `CUSTOMER_EDIT` |
+| Vehicles | Vehicle Lookup... | Search dialog; shows the picked vehicle's details | `VEHICLE_VIEW` |
+| Tickets | New Weigh Ticket | Same as File → New Weigh Ticket | `TICKET_CREATE` |
+| Tickets | Ticket List (`Ctrl+L`) | Browse saved weigh tickets (only one instance is ever opened) | `TICKET_VIEW` |
+| Tickets | Cascade Windows / Tile Horizontally | MDI layout | — |
+| Help | About... | Version box | — |
 
 ### Weigh ticket wizard
 
@@ -194,7 +223,9 @@ is re-validated on Save.
    vehicle fills in the description, default tare and max gross, and selects the vehicle's customer.
 2. **Weights** — gross and tare; net and net-tonnes update live. Gross over the vehicle's max gross
    shows a red warning and prompts for confirmation on Next.
-3. **Charges** — product selection defaults the price per tonne (overtypeable). Subtotal / GST /
+3. **Charges** — product selection defaults the price per tonne. It is overtypeable only with the
+   `TICKET_PRICE_OVERRIDE` privilege; without it the box is read-only and greyed at the price-list
+   rate, and Save refuses any price that does not match the product default. Subtotal / GST /
    total recalculate on every change. GST is charged at the configured `GstRate` and only on
    products flagged `GstApplicable`.
 4. **Review** — read-only summary, notes and ticket status (`Open` / `Completed` / `Void`).
@@ -230,6 +261,10 @@ or delete. Correcting one means voiding it and re-weighing, which is what the de
 keystroke against code and name. Deleting a customer is blocked if any vehicle or weigh ticket
 still references it — mark it inactive instead.
 
+New and Edit need `CUSTOMER_EDIT`; Delete needs `CUSTOMER_DELETE`, which only the Administrator
+profile holds. The shortcut keys go through the same handlers as the buttons, so `F2` on a greyed
+Edit gets the *"You do not have the..."* box rather than opening the dialog.
+
 ---
 
 ## Project layout
@@ -237,7 +272,7 @@ still references it — mark it inactive instead.
 ```
 WeighbridgeAdmin.csproj      SDK-style project, net48, WinForms
 app.config                   Connection string + app settings
-Program.cs                   Entry point; DB reachability check before showing the UI
+Program.cs                   Entry point; DB reachability check, then sign-on, then the UI
 
 Model/                       Plain data holders, no behaviour
   Customer.cs                Customer master
@@ -245,12 +280,19 @@ Model/                       Plain data holders, no behaviour
   Product.cs                 Product + price per tonne + GST flag
   WeighTicket.cs             Ticket; also TicketStatus string constants
   WeighTicketSummary.cs      Read-only ticket row with rego/customer/product joined on
+  UserAccount.cs             Operator login, with the profile name joined on
+  SecurityProfile.cs         Job role (nothing constructs one yet)
+
+Security/
+  Privileges.cs              One const string per privilege name
+  SecurityContext.cs         Static signed-on session: SignIn, HasPrivilege, Demand
 
 Data/
   Repository.cs              All data access. Singleton via Repository.Current.
                              Inline SQL, one connection per call, manual reader mapping.
 
 Forms/
+  LoginForm.*                Sign-on dialog: operator dropdown, Sign In / Exit
   MainForm.*                 MDI parent: menu, status bar, clock timer
   CustomerListForm.*         Customer browse grid + toolbar + search
   CustomerEditForm.*         Add/edit customer dialog with ErrorProvider validation
@@ -294,5 +336,20 @@ These are deliberate characteristics of the code, worth knowing before you chang
   rounding). The demo data stores those exact values rather than recomputing in T-SQL, because
   `ROUND()` rounds half away from zero and disagrees by one cent on 6 of the 30 seeded rows. Don't
   "fix" the seed totals in SQL.
-- **The logged-in operator is hard-coded** — `Repository.CurrentUserName` returns a fixed string.
-  There is no authentication.
+- **There is authorisation but no authentication.** `LoginForm` picks an operator out of
+  `dbo.Users`; `SecurityContext.SignIn` reads that profile's grants out of
+  `dbo.SecurityProfilePrivileges` once into a `HashSet<string>` and holds them statically for
+  the life of the process. Nothing verifies that the person at the keyboard is who they picked,
+  and nothing re-reads the grants — changing a profile in the database needs a restart.
+  `Repository.CurrentUserName` composes the status-bar string out of that session.
+- **Every gated command is checked twice.** The control is disabled in the form's `Load` from
+  `SecurityContext.HasPrivilege`, and the handler opens with `SecurityContext.Demand`, caught
+  and turned into a message box. Note that `CustomerListForm.ReloadGrid` and
+  `TicketListForm.ReloadGrid` re-set their toolbar buttons from the row count on every load, so
+  the privilege has to be ANDed in there rather than only in `Load` — set it in `Load` alone and
+  the next refresh quietly switches the button back on.
+- **One rule is on a value, not a control.** `WeighTicketForm.numPrice` goes `ReadOnly` (with
+  `Increment = 0`, because `ReadOnly` alone leaves the spin buttons working) without
+  `TICKET_PRICE_OVERRIDE`, and `btnSave_Click` separately refuses to save a price that differs
+  from the product's price-list rate. The control state is the courtesy; the value check is the
+  rule.

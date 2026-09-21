@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using WeighbridgeAdmin.Data;
 using WeighbridgeAdmin.Model;
+using WeighbridgeAdmin.Security;
 
 namespace WeighbridgeAdmin.Forms
 {
@@ -55,6 +56,22 @@ namespace WeighbridgeAdmin.Forms
             this.cboProduct.SelectedIndex = -1;
 
             this.cboStatus.SelectedIndex = 0;
+
+            // Saving the ticket needs TICKET_CREATE.  Anyone else can key one
+            // up and look at the figures, they just cannot commit it.
+            this.btnSave.Enabled = SecurityContext.HasPrivilege(Privileges.TicketCreate);
+
+            // The price per tonne is defaulted from the product price list.
+            // Without TICKET_PRICE_OVERRIDE the operator is stuck with that
+            // default - the box still shows the price, it just cannot be
+            // changed.  ReadOnly on its own leaves the spin buttons live, so
+            // the increment goes to zero as well.
+            if (!SecurityContext.HasPrivilege(Privileges.TicketPriceOverride))
+            {
+                this.numPrice.ReadOnly = true;
+                this.numPrice.Increment = 0m;
+                this.numPrice.BackColor = Color.FromArgb(240, 240, 240);
+            }
 
             _loading = false;
 
@@ -512,6 +529,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void btnSave_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.TicketCreate);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             // Re-run every page, not just the current one.
             for (int i = 0; i <= 3; i++)
             {
@@ -519,6 +547,23 @@ namespace WeighbridgeAdmin.Forms
                 {
                     return;
                 }
+            }
+
+            // The price box is read only for a profile without the override,
+            // but check the figure itself as well - it is the value that goes
+            // on the invoice, not the state of the control, that matters.
+            Product priced = GetSelectedProduct();
+            if (priced != null && this.numPrice.Value != priced.PricePerTonne
+                && !SecurityContext.HasPrivilege(Privileges.TicketPriceOverride))
+            {
+                MessageBox.Show(this,
+                    "The price per tonne must stay at the price list rate of "
+                    + priced.PricePerTonne.ToString("N2") + " for " + priced.Code + ".\r\n\r\n"
+                    + "Charging a different rate needs the 'TICKET_PRICE_OVERRIDE' privilege.",
+                    "Access denied", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                this.tabTicket.SelectedIndex = 2;
+                this.numPrice.Focus();
+                return;
             }
 
             if (MessageBox.Show(this, "Save this weigh ticket?", "Confirm Save",

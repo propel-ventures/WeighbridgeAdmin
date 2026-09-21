@@ -5,6 +5,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
 using WeighbridgeAdmin.Model;
+using WeighbridgeAdmin.Security;
 
 namespace WeighbridgeAdmin.Data
 {
@@ -48,10 +49,22 @@ namespace WeighbridgeAdmin.Data
             }
         }
 
-        /// <summary>Operator that is "logged in".  Shown on the main status bar.</summary>
+        /// <summary>
+        /// The signed on operator, the way the status bar has always shown it -
+        /// NAME in capitals with the security profile in brackets after it.
+        /// Empty until the sign on dialog has been through, which only happens
+        /// if something asks before Program.Main has got that far.
+        /// </summary>
         public string CurrentUserName
         {
-            get { return "D.MCGRATH (Weighbridge Operator)"; }
+            get
+            {
+                if (SecurityContext.CurrentUser == null)
+                {
+                    return "(not signed on)";
+                }
+                return SecurityContext.FullName.ToUpper() + " (" + SecurityContext.ProfileName + ")";
+            }
         }
 
         /// <summary>
@@ -749,6 +762,107 @@ namespace WeighbridgeAdmin.Data
             cmd.Parameters.AddWithValue("@Total", ticket.Total);
             cmd.Parameters.AddWithValue("@Notes", ticket.Notes);
             cmd.Parameters.AddWithValue("@Status", ticket.Status);
+        }
+
+        // ------------------------------------------------------------------
+        // Users and security profiles
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// The profile name is joined on rather than looked up per row - the
+        /// sign on combo and the status bar both want it straight away.
+        /// </summary>
+        private const string UserColumns =
+            "u.UserId, u.UserName, u.FullName, u.ProfileId, u.IsActive, p.ProfileName";
+
+        private const string UserFrom =
+            " FROM dbo.Users u JOIN dbo.SecurityProfiles p ON p.ProfileId = u.ProfileId ";
+
+        private static UserAccount ReadUser(SqlDataReader dr)
+        {
+            UserAccount u = new UserAccount();
+            u.UserId = Convert.ToInt32(dr["UserId"]);
+            u.UserName = GetString(dr, "UserName");
+            u.FullName = GetString(dr, "FullName");
+            u.ProfileId = Convert.ToInt32(dr["ProfileId"]);
+            u.ProfileName = GetString(dr, "ProfileName");
+            u.IsActive = Convert.ToBoolean(dr["IsActive"]);
+            return u;
+        }
+
+        /// <summary>Operators offered by the sign on dialog.</summary>
+        public List<UserAccount> GetActiveUsers()
+        {
+            List<UserAccount> results = new List<UserAccount>();
+
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT " + UserColumns + UserFrom +
+                    " WHERE u.IsActive = 1 " +
+                    " ORDER BY u.FullName", cn);
+
+                using (SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        results.Add(ReadUser(dr));
+                    }
+                }
+            }
+            return results;
+        }
+
+        public UserAccount GetUserByName(string userName)
+        {
+            if (userName == null)
+            {
+                userName = "";
+            }
+
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT " + UserColumns + UserFrom +
+                    " WHERE u.UserName = @UserName", cn);
+                cmd.Parameters.AddWithValue("@UserName", userName.Trim());
+
+                using (SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    if (dr.Read())
+                    {
+                        return ReadUser(dr);
+                    }
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// The privilege names granted to a profile.  A privilege the profile
+        /// does not hold simply has no row, so this is the whole grant list.
+        /// </summary>
+        public List<string> GetProfilePrivileges(int profileId)
+        {
+            List<string> results = new List<string>();
+
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT PrivilegeName FROM dbo.SecurityProfilePrivileges " +
+                    " WHERE ProfileId = @ProfileId " +
+                    " ORDER BY PrivilegeName", cn);
+                cmd.Parameters.AddWithValue("@ProfileId", profileId);
+
+                using (SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        results.Add(GetString(dr, "PrivilegeName"));
+                    }
+                }
+            }
+            return results;
         }
     }
 }

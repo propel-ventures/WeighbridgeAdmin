@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using WeighbridgeAdmin.Data;
 using WeighbridgeAdmin.Model;
+using WeighbridgeAdmin.Security;
 
 namespace WeighbridgeAdmin.Forms
 {
@@ -20,6 +21,11 @@ namespace WeighbridgeAdmin.Forms
 
         private void CustomerListForm_Load(object sender, EventArgs e)
         {
+            // New never depends on the row count, so it is switched on once
+            // here.  Edit and Delete are dealt with in ReloadGrid, which sets
+            // them from the row count every time the grid is filled.
+            this.tbbNew.Enabled = SecurityContext.HasPrivilege(Privileges.CustomerEdit);
+
             ReloadGrid();
         }
 
@@ -36,9 +42,10 @@ namespace WeighbridgeAdmin.Forms
 
             this.lblRecordCount.Text = list.Count.ToString() + " record(s)";
 
-            // Toolbar buttons only make sense when there is a row.
-            this.tbbEdit.Enabled = (list.Count > 0);
-            this.tbbDelete.Enabled = (list.Count > 0);
+            // Toolbar buttons only make sense when there is a row - and only
+            // when the operator's profile allows the command at all.
+            this.tbbEdit.Enabled = (list.Count > 0) && SecurityContext.HasPrivilege(Privileges.CustomerEdit);
+            this.tbbDelete.Enabled = (list.Count > 0) && SecurityContext.HasPrivilege(Privileges.CustomerDelete);
         }
 
         private void txtSearch_TextChanged(object sender, EventArgs e)
@@ -59,6 +66,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void tbbNew_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.CustomerEdit);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             CustomerEditForm dlg = new CustomerEditForm();
             dlg.CustomerToEdit = null;
             if (dlg.ShowDialog(this) == DialogResult.OK)
@@ -71,6 +89,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void tbbEdit_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.CustomerEdit);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             Customer selected = GetSelectedCustomer();
             if (selected == null)
             {
@@ -91,6 +120,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void tbbDelete_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.CustomerDelete);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             Customer selected = GetSelectedCustomer();
             if (selected == null)
             {
