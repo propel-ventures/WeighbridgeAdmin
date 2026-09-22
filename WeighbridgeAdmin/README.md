@@ -64,13 +64,14 @@ sqlcmd -S "(localdb)\MSSQLLocalDB" -d WeighbridgeDb -i Database\CreateDatabase.s
 Create a database named `WeighbridgeDb`, then open `Database/CreateDatabase.sql` and execute it
 with that database selected.
 
-> **The script is destructive.** It drops and recreates `Users`, `SecurityProfilePrivileges`,
-> `SecurityProfiles`, `WeighTickets`, `Vehicles`, `Products`, `Customers` and `Counters` every
-> time it runs. Re-running it wipes anything you have entered.
+> **The script is destructive.** It drops and recreates `ContractRates`, `CustomerContacts`,
+> `Users`, `SecurityProfilePrivileges`, `SecurityProfiles`, `WeighTickets`, `Vehicles`,
+> `Products`, `Customers` and `Counters` every time it runs. Re-running it wipes anything you
+> have entered.
 
 **What you get:** 15 customers, 8 products, 20 vehicles, 30 weigh tickets, a `Counters` row
-that starts ticket numbering at `WB100031`, and three operator logins on three security
-profiles (see "Sign in" below).
+that starts ticket numbering at `WB100031`, three operator logins on three security profiles
+(see "Sign in" below), plus 12 customer contacts and 9 contract rates for the account screen.
 
 ---
 
@@ -265,6 +266,35 @@ New and Edit need `CUSTOMER_EDIT`; Delete needs `CUSTOMER_DELETE`, which only th
 profile holds. The shortcut keys go through the same handlers as the buttons, so `F2` on a greyed
 Edit gets the *"You do not have the..."* box rather than opening the dialog.
 
+### Customer account
+
+**Account** on the customer list toolbar (or `F6`) opens the full account screen for the selected
+customer, as an MDI child rather than a dialog — one per customer, and you can leave it open
+beside the list. It is the deepest screen in the application.
+
+The top half is the account itself: code, name, A.B.N., contact details, credit limit, and two
+address blocks — the trading address, and a postal address that can be left blank to bill to the
+trading one. Under it are three tabs:
+
+- **Contacts** — an editable grid. Type in the bottom row to add someone, select a row and press
+  `Delete` to remove them. Position is a dropdown; Phone and Email are free text and the email is
+  format-checked as you leave the cell. Exactly one contact has to be ticked as the primary, and
+  ticking one unticks the rest.
+- **Contract Rates** — an editable grid of negotiated prices per tonne, each with a product, a
+  rate and a date window (leave *Effective to* blank for an open-ended rate). The rate cell only
+  accepts digits. Two rates for the same product are not allowed to overlap in time, and you are
+  told as soon as you leave the row if they do. The rate in force today is shown in black and
+  expired ones in grey, with a totals line underneath.
+- **Vehicles** — read only. Vehicles belong to the vehicle master, not to the account.
+
+Everything on the screen saves together with one **Save**, which stays greyed until something
+actually changes. Closing with unsaved changes prompts to save, discard or stay.
+
+Contacts need `CUSTOMER_EDIT`. Contract rates need `TICKET_PRICE_OVERRIDE` — the same privilege
+that lets an operator charge a weigh ticket at something other than the price-list rate — so for
+the Weighbridge Operator profile the rates tab is greyed and relabelled *(read only)* while the
+contacts beside it stay editable.
+
 ---
 
 ## Project layout
@@ -282,10 +312,17 @@ Model/                       Plain data holders, no behaviour
   WeighTicketSummary.cs      Read-only ticket row with rego/customer/product joined on
   UserAccount.cs             Operator login, with the profile name joined on
   SecurityProfile.cs         Job role (nothing constructs one yet)
+  CustomerContact.cs         Someone to ring at a customer
+  ContractRate.cs            Negotiated rate for one product over a date window
 
 Security/
   Privileges.cs              One const string per privilege name
   SecurityContext.cs         Static signed-on session: SignIn, HasPrivilege, Demand
+
+Controls/                    Reusable user controls
+  AddressBlock.*             Address / suburb / state / postcode in a GroupBox
+  SearchBox.*                Caption, search box, Clear button, record count
+  CustomerHeaderPanel.*      Account fields plus TWO AddressBlock instances
 
 Data/
   Repository.cs              All data access. Singleton via Repository.Current.
@@ -293,6 +330,8 @@ Data/
 
 Forms/
   LoginForm.*                Sign-on dialog: operator dropdown, Sign In / Exit
+  BaseEntryForm.*            Base class, not a screen: header, Save/Close, dirty flag
+  CustomerAccountForm.*      Inherits BaseEntryForm; header panel + 3 tabs, 2 editable grids
   MainForm.*                 MDI parent: menu, status bar, clock timer
   CustomerListForm.*         Customer browse grid + toolbar + search
   CustomerEditForm.*         Add/edit customer dialog with ErrorProvider validation
@@ -353,3 +392,24 @@ These are deliberate characteristics of the code, worth knowing before you chang
   `TICKET_PRICE_OVERRIDE`, and `btnSave_Click` separately refuses to save a price that differs
   from the product's price-list rate. The control state is the courtesy; the value check is the
   rule.
+- **`CustomerAccountForm` inherits `BaseEntryForm`.** Its Save and Close buttons, header labels,
+  dirty flag and close prompt are not in its own designer file — they come from the base. The
+  base declares those controls `protected` rather than `private` for exactly that reason, and
+  drives the screen through three `virtual` hooks: `OnLoadRecord`, `OnValidateEntry` and
+  `OnSaveRecord`. It is currently the only screen that inherits it; a second one would be the
+  obvious next thing to add.
+- **Save is enabled from two sources ANDed together** — `IsDirty && AllowSave`. The derived
+  screen sets `AllowSave` from the operator's privileges once, and every edit flips `IsDirty`.
+  Forget either and the button is wrong, which is the same trap as the toolbar buttons above.
+- **Two save paths against `dbo.Customers`.** `SaveCustomer` (the old edit dialog) does not
+  mention the four postal-address columns, so it cannot blank them; `SaveCustomerAccount` (the
+  account screen) writes all of them. Adding the postal address to the older statement would
+  look tidier and would quietly wipe data.
+- **The editable grids hold the model on `DataGridViewRow.Tag`** and write it back cell by cell
+  in `CellEndEdit`, so the working list stays correct even when the search box refills the grid.
+  Deleted rows exist only as two `List<int>` fields of ids until Save runs. There is no
+  transaction around the save: header, contacts and rates each go through their own connection,
+  exactly like the rest of the application.
+- **Two business rules live only in grid event handlers** — one primary contact per customer,
+  and no overlapping date windows for the same product. Neither is a database constraint. If you
+  are reading the schema to work out the rules, you will miss both.

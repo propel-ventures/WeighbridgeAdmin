@@ -44,6 +44,7 @@ namespace WeighbridgeAdmin.Forms
 
             // Toolbar buttons only make sense when there is a row - and only
             // when the operator's profile allows the command at all.
+            this.tbbAccount.Enabled = (list.Count > 0) && SecurityContext.HasPrivilege(Privileges.CustomerView);
             this.tbbEdit.Enabled = (list.Count > 0) && SecurityContext.HasPrivilege(Privileges.CustomerEdit);
             this.tbbDelete.Enabled = (list.Count > 0) && SecurityContext.HasPrivilege(Privileges.CustomerDelete);
         }
@@ -160,6 +161,54 @@ namespace WeighbridgeAdmin.Forms
             ReloadGrid();
         }
 
+        /// <summary>
+        /// Opens the full account screen as an MDI child rather than a modal
+        /// dialog, so the operator can leave it open beside the list.  Only
+        /// one account screen per customer is allowed at a time.
+        /// </summary>
+        private void tbbAccount_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                SecurityContext.Demand(Privileges.CustomerView);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            Customer selected = GetSelectedCustomer();
+            if (selected == null)
+            {
+                MessageBox.Show(this, "Please select a customer first.", "Customer Account",
+                    MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
+                return;
+            }
+
+            Form parent = this.MdiParent;
+            if (parent == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < parent.MdiChildren.Length; i++)
+            {
+                CustomerAccountForm open = parent.MdiChildren[i] as CustomerAccountForm;
+                if (open != null && open.CustomerId == selected.Id)
+                {
+                    open.Activate();
+                    return;
+                }
+            }
+
+            CustomerAccountForm frm = new CustomerAccountForm();
+            frm.CustomerId = selected.Id;
+            frm.MdiParent = parent;
+            frm.Show();
+        }
+
         private void tbbRefresh_Click(object sender, EventArgs e)
         {
             this.txtSearch.Text = "";
@@ -186,6 +235,11 @@ namespace WeighbridgeAdmin.Forms
             else if (e.KeyCode == Keys.F2)
             {
                 tbbEdit_Click(sender, EventArgs.Empty);
+                e.Handled = true;
+            }
+            else if (e.KeyCode == Keys.F6)
+            {
+                tbbAccount_Click(sender, EventArgs.Empty);
                 e.Handled = true;
             }
             else if (e.KeyCode == Keys.Insert)

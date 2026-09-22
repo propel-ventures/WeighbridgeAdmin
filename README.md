@@ -112,10 +112,10 @@ Being explicit, because some of this is tested and some isn't:
 | Claim | Status |
 |---|---|
 | `dotnet build` clean from scratch | ✅ 0 warnings, 0 errors (`-t:Rebuild`, Windows) |
-| `CreateDatabase.sql` runs without error | ✅ SQL Server 2022 in Docker (original schema), and re-verified against SQL Server 2025 Express after the security tables were added |
-| `CreateDatabase.sql` is safe to re-run | ✅ run twice back to back, second pass clean |
+| `CreateDatabase.sql` runs without error | ✅ SQL Server 2022 in Docker (original schema), and re-verified against SQL Server 2025 Express after the security and account tables were added |
+| `CreateDatabase.sql` is safe to re-run | ✅ run twice back to back, second pass clean, on the full schema |
 | Seeded data matches the original in-memory values | ✅ all 30 tickets compared field by field |
-| Every SQL statement in `Repository.cs` executes | ⚠️ 22 of 23 — extracted and run in isolated transactions. The ticket-summary query behind `SearchTickets` arrived later with the ticket browse screen and has not been run in isolation. The three security queries have. |
+| Every SQL statement in `Repository.cs` executes | ⚠️ the three security queries were extracted and run in isolated transactions; the ticket-summary query behind `SearchTickets` still has not been. The nine account-screen queries have not been run in isolation either, but `GetCustomerAccount`, `GetCustomerContacts`, `GetContractRates`, `GetVehiclesByCustomer` and `SaveCustomerAccount` were all exercised through the running screen. `SaveContact`, `DeleteContact`, `SaveContractRate` and `DeleteContractRate` have **not run at all**. |
 | Computed `NetWeight` column agrees with `Gross - Tare` | ✅ 0 mismatching rows |
 | GST-free product yields zero GST | ✅ |
 | Privilege loading, `HasPrivilege`, `Demand` | ✅ all three profiles driven through `SecurityContext` against the real database; `Demand` throws `UnauthorizedAccessException` carrying the privilege name |
@@ -126,7 +126,15 @@ Being explicit, because some of this is tested and some isn't:
 | `numPrice` read-only without `TICKET_PRICE_OVERRIDE` | ❌ not verified in the running UI — the code sets it in `Form_Load`, but the weigh ticket screen was not driven far enough to read the control back |
 | `WeighTicketForm.btnSave`, `CustomerEditForm.btnOK`, `TicketListForm.tbbView` enablement | ❌ not verified in the running UI |
 | The "Access denied" message box actually appearing | ❌ not verified — `Demand` throwing the right exception is verified, the `MessageBox.Show` that catches it is not |
-| Forms rendering, tab flow, F4 lookup, save round-trip | ❌ not verified |
+| `CustomerAccountForm` opening with its inherited chrome | ✅ opened on Windows from the customer list; the inherited header, dirty label and Save/Close strip are all present and the screen is titled from the record |
+| Both `AddressBlock` instances rendering with their own data | ✅ trading address showed `14 Kessler Drive / Yatala / 4207` and postal `PO Box 417 / Beenleigh / 4207` on the same screen |
+| Contacts grid rendering as editable | ✅ two contacts plus the new-row placeholder, with text cells, the `Position` combo cell and the `Primary` check box cell all live |
+| The four-hop dirty chain | ✅ changing the State combo inside an `AddressBlock` lit the inherited Save button and flipped the label to "Modified - not yet saved" |
+| Privilege cascade on the account screen | ✅ as Read Only the address combo could not even take focus and Save stayed disabled; as Administrator both worked |
+| Account screen save round-trip | ✅ edited the trading State, saved, and the change landed in `dbo.Customers`; the dirty flag cleared and **`PostalState` was left untouched**, which is the two-save-path behaviour working |
+| Contract rates tab — editing, date validation, overlap check, footer totals | ❌ not verified in the running UI. The rates grid was never driven by hand; only the contacts grid was seen rendering. |
+| Contact/rate insert and delete through the grids | ❌ not verified — the save round-trip that was tested only changed a header field |
+| Forms rendering, tab flow, F4 lookup, weigh ticket save round-trip | ❌ not verified |
 
 The data layer and the privilege model are well covered; most of the UI still is not.
 The sign-on path, the main menu and the customer toolbar have now been seen working on
@@ -145,6 +153,8 @@ driven by hand.
 | **VehicleLookupDialog** | The reusable "F4 lookup" pattern: search, pick, return. | Search `TextBox` filtering on every keystroke; read-only `DataGridView` populated **row by row in code** with the `Vehicle` parked on `DataGridViewRow.Tag`; Select/Cancel; result handed back via the public `SelectedVehicle` property; optional `InitialSearchText` input property; inactive vehicles greyed out and confirmed before use. | **Lookup/picker dialog pattern.** Public in/out properties → component props + `onSelect` callback. Row `.Tag` object smuggling → typed row data. Reused from `WeighTicketForm`, so it proves the converted component is genuinely reusable rather than copy-pasted. |
 | **WeighTicketForm** | The complex screen: a 4-step weigh ticket wizard. | `TabControl` with 4 pages plus Back/Next/Save/Cancel in a docked bottom `Panel`; `NumericUpDown` for gross/tare/price; read-only `Label`s for Net, Subtotal, GST, Total; a red overweight warning `Label`; `DateTimePicker`; three `ComboBox`es (customer, product, status); `"..."` button and F4 both opening `VehicleLookupDialog`; 13 caption/value label pairs on the Review tab; multiline Notes `TextBox`. | **Complex screen.** Wizard navigation with per-step validation → multi-step form. Cross-tab dependencies (vehicle → customer + tare; net → subtotal → GST → total) → derived state. Master-data defaulting that stays editable. Dialog-to-parent data flow. And the big one: **derived values computed in event handlers rather than held in a model** (see below). |
 | **TicketListForm** | Weigh ticket browse. Read only — a saved ticket is an accounting document, so nothing here edits or deletes one. | `DataGridView` with 13 Designer-declared columns bound through a `BindingSource` to `WeighTicketSummary`; a filter strip of `CheckBox` + two `DateTimePicker`s, customer and status `ComboBox`es and a search box, all wired into one shared `Filter_Changed` handler; row fore-colour set per row after every load; a totals `Label` rebuilt as one concatenated string; View/Refresh/Clear Filters `ToolStrip`; F2/F5. | **Filtered list and reporting screen.** Multi-field filter panel → one filter state object driving one query. Sentinel rows (`Id 0` = "(All customers)", index 0 = "(All statuses)") → optional/nullable filter params. Status-driven row colouring → conditional row styling. Footer aggregates computed in the UI → derived/memoised totals. A public `ReloadGrid()` called from two other screens → shared cache invalidation. |
+| **BaseEntryForm** | Not a screen — the base class `CustomerAccountForm` inherits. Owns the header labels, the docked Save/Close strip, the dirty flag and the "unsaved changes" prompt on `FormClosing`. | `protected` (not private) control fields, so the inheriting designer can reach them; three `virtual` hooks — `OnLoadRecord`, `OnValidateEntry`, `OnSaveRecord`; `Save` enabled from **two** sources ANDed together, `IsDirty && AllowSave`. | **Visual form inheritance.** The killer detail: the derived screen's `.Designer.cs` does **not** contain any of these controls, so a converter that parses designer files in isolation produces a screen missing its whole button strip and header. The inheritance has to be followed. |
+| **CustomerAccountForm** | The deep screen: customer header, contacts and contract rates, all saved together. Inherits `BaseEntryForm`. Opened from the customer list toolbar (or F6) as an MDI child, one per customer. | `CustomerHeaderPanel` (a `UserControl` containing two `AddressBlock` `UserControl`s) over a nested `TabControl` of three pages; **two editable `DataGridView`s** with `AllowUserToAddRows`, a `DataGridViewComboBoxColumn`, a `DataGridViewCheckBoxColumn`, `CellValidating` with `e.Cancel`, `DefaultValuesNeeded`, `UserDeletingRow`, `EditingControlShowing` hanging a `KeyPress` filter on the editor, `CurrentCellDirtyStateChanged` + `CommitEdit`, and a `DataError` handler; two `SearchBox` `UserControl` instances; a footer total rebuilt on every cell edit. | **The hard screen.** Master–detail with in-grid editing → React form-array state that exists nowhere in the source, only across eight event handlers. Deleted rows tracked in two `List<int>` fields that are the *only* record a row existed. Three privileges landing on one screen. A user control inside a user control inside an inherited form → three levels of component extraction. |
 
 ---
 
@@ -159,6 +169,20 @@ dbo.SecurityProfiles          ProfileId, ProfileName, Description
 dbo.SecurityProfilePrivileges ProfileId (FK), PrivilegeName      -- one row per grant
 dbo.Users                     UserId, UserName, FullName, ProfileId (FK), IsActive
 ```
+
+The account screen added two more tables alongside them:
+
+```
+dbo.CustomerContacts  ContactId, CustomerId (FK), ContactName, Position, Phone, Email, IsPrimary
+dbo.ContractRates     RateId, CustomerId (FK), ProductId (FK), RatePerTonne,
+                      EffectiveFrom, EffectiveTo (NULL = open ended), Notes
+```
+
+Neither has a constraint behind the rule that matters. At most one contact per customer may
+be primary, and two rate windows for the same product must not overlap — both are enforced
+in grid event handlers while the operator types, and nowhere else. That is period-accurate,
+and it means the conversion has to find those rules in the UI code because the schema does
+not state them.
 
 `Program.Main` shows `LoginForm` after the config and connection checks; on OK it calls
 `SecurityContext.SignIn(user)`, which reads that profile's grant rows once into a
@@ -193,6 +217,14 @@ the check is the rule.
 | `TICKET_CREATE` | MainForm | `mnuTicketsNew` | `mnuTicketsNew_Click` |
 | `TICKET_CREATE` | WeighTicketForm | `btnSave` | `btnSave_Click` |
 | `TICKET_PRICE_OVERRIDE` | WeighTicketForm | `numPrice` goes `ReadOnly` (see below) | `btnSave_Click` compares the price against the product default |
+| `CUSTOMER_VIEW` | CustomerListForm | `tbbAccount` | `tbbAccount_Click` |
+| `CUSTOMER_EDIT` | CustomerAccountForm | header panel goes read-only, contacts grid goes read-only, `AllowSave` | base class refuses the save |
+| `TICKET_PRICE_OVERRIDE` | CustomerAccountForm | whole **rates grid** read-only, tab relabelled "(read only)" | — |
+
+`CustomerAccountForm` is the only screen where three privileges land at once, and where a
+privilege greys a whole grid rather than a button: contract rates are a pricing decision,
+so they need the same privilege that lets an operator move a weigh ticket off the price
+list, while the contacts beside them only need `CUSTOMER_EDIT`.
 
 A denial that gets past the greying shows
 `MessageBox.Show("You do not have the 'X' privilege.", "Access denied", ...)`.
@@ -225,6 +257,46 @@ subtotal/GST/total.
 from the product default and the operator lacks the privilege, the save is blocked with a
 message box naming the rule. That makes it a field-level, data-dependent rule rather than a
 whole-button gate — the kind that does not survive a naive "disable the button" conversion.
+
+---
+
+## Structure worth converting
+
+Most of the screens are flat: a form, some controls, event handlers. Three pieces
+deliberately are not, and they are where a conversion that only parses `.Designer.cs`
+files falls over.
+
+**A user control inside a user control inside an inherited form.** `CustomerAccountForm`
+inherits `BaseEntryForm` and hosts `CustomerHeaderPanel`, which itself hosts two
+`AddressBlock` instances. Four files have to be read and stitched together before the
+screen's real control tree is known, and two of the levels contribute controls that never
+appear in the account screen's own designer file.
+
+**Designer-serialised custom properties.** `AddressBlock.BlockTitle`,
+`SearchBox.Caption` and `CustomerHeaderPanel.ReadOnlyHeader` are `[Browsable]` properties
+whose *values* are written into the **consumer's** `InitializeComponent`, not the
+control's. The two address blocks are the same class with different `BlockTitle` values —
+one component, two instances, two prop sets. The data properties next to them are
+`[DesignerSerializationVisibility(Hidden)]` precisely so a customer's address is never
+baked into a form file. A converter has to tell those two kinds of property apart.
+
+**Property cascades.** Setting `CustomerHeaderPanel.ReadOnlyHeader` greys its own fields
+*and* sets `ReadOnlyBlock` on both child controls, which in turn sets `ReadOnly` and
+`BackColor` on their text boxes. One assignment, three levels deep.
+
+**Events bubbling up by hand.** There is no event aggregator. `AddressBlock` raises
+`AddressChanged`; `CustomerHeaderPanel` subscribes and re-raises `HeaderChanged`; the form
+subscribes to that and calls the base class's `MarkDirty()`; the base decides whether the
+Save button lights up, by ANDing dirty state with the operator's privilege. Four hops for
+one keystroke.
+
+**Editable grids.** The two grids on the account screen are the only editable ones in the
+application, and between them they use a combo column, a checkbox column, the new-row
+placeholder, row deletion, per-cell validation that cancels the edit, a key filter hung on
+the editing control, an explicit `CommitEdit` to make a checkbox commit immediately, and a
+footer aggregate recomputed on every cell edit. The edited objects hang off
+`DataGridViewRow.Tag` and are written back cell by cell in `CellEndEdit`; the two
+`List<int>` fields of deleted ids are the only place a removed row is remembered.
 
 ---
 
@@ -314,15 +386,23 @@ WeighbridgeAdmin/
     WeighTicketSummary.cs      read-only joined ticket row for the browse grid
     UserAccount.cs             operator login, profile name joined on
     SecurityProfile.cs         job role  (no callers yet - see "unused members")
+    CustomerContact.cs         someone to ring at a customer
+    ContractRate.cs            negotiated rate for one product over a date window
   Security/
     Privileges.cs              const string per privilege, C# name -> wire name
     SecurityContext.cs         static signed-on session; SignIn / HasPrivilege / Demand
+  Controls/
+    AddressBlock.cs        / .Designer.cs   four address fields in a GroupBox
+    SearchBox.cs           / .Designer.cs   caption + box + Clear + record count
+    CustomerHeaderPanel.cs / .Designer.cs   account fields + TWO AddressBlocks
   Data/
     Repository.cs              singleton, ADO.NET against SQL Server
   Database/
     CreateDatabase.sql         schema + demo data; copied next to the exe on build
   Forms/
     LoginForm.cs           / .Designer.cs               (no .resx)
+    BaseEntryForm.cs       / .Designer.cs               base class, not a screen
+    CustomerAccountForm.cs / .Designer.cs               inherits BaseEntryForm
     MainForm.cs            / .Designer.cs / .resx
     CustomerListForm.cs    / .Designer.cs / .resx
     CustomerEditForm.cs    / .Designer.cs / .resx
@@ -342,6 +422,14 @@ WeighbridgeAdmin/
 | `WeighTicketSummary` | The same ticket with Registration, CustomerCode/Name and ProductCode/Name already joined on, plus derived **NetTonnes**. Read only — nothing writes a summary back. It exists so the browse grid fills from one query instead of going back to the database once per row. |
 | `UserAccount` | UserId, UserName, FullName, ProfileId, **ProfileName** (joined on, like the ticket summary), IsActive. No password field — there is no password. |
 | `SecurityProfile` | ProfileId, ProfileName, Description. The privilege grants live in their own table and come back from `GetProfilePrivileges` as a plain `List<string>`, so nothing currently constructs one of these. |
+| `CustomerContact` | ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary. A contact with `ContactId == 0` has not been written yet — that is how the account screen tells a new grid row from an existing one. |
+| `ContractRate` | RateId, CustomerId, ProductId, **ProductCode/ProductName** (joined on), RatePerTonne, EffectiveFrom, **EffectiveTo (nullable — null means open ended)**, Notes. Carries one piece of behaviour, `IsInForceOn(day)`, which is the only model in the app that has any. |
+
+`Customer` also grew four postal-address columns with the account screen. They are written
+**only** by `SaveCustomerAccount`; the older `SaveCustomer` that `CustomerEditForm` calls
+does not mention them, so editing a customer through the old dialog leaves the postal
+address alone instead of blanking it. Two save paths against one table, which is exactly
+what happens when a screen gets bolted onto a system years later.
 
 Weights are kilograms; prices are dollars per tonne. `Subtotal = (Net / 1000) × PricePerTonne`,
 `Gst = Subtotal × GstRate` (10% unless `app.config` says otherwise) when the product is taxable,
