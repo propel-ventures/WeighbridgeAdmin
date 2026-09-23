@@ -37,6 +37,8 @@ namespace WeighbridgeAdmin.Forms
             this.tbbNew = new System.Windows.Forms.ToolStripButton();
             this.tbbEdit = new System.Windows.Forms.ToolStripButton();
             this.tbbDelete = new System.Windows.Forms.ToolStripButton();
+            this.tbbSep0 = new System.Windows.Forms.ToolStripSeparator();
+            this.tbbAccount = new System.Windows.Forms.ToolStripButton();
             this.tbbSep1 = new System.Windows.Forms.ToolStripSeparator();
             this.tbbRefresh = new System.Windows.Forms.ToolStripButton();
             this.pnlSearch = new System.Windows.Forms.Panel();
@@ -105,6 +107,8 @@ namespace WeighbridgeAdmin.Forms
             this.tbbNew,
             this.tbbEdit,
             this.tbbDelete,
+            this.tbbSep0,
+            this.tbbAccount,
             this.tbbSep1,
             this.tbbRefresh});
             this.tlbMain.Location = new System.Drawing.Point(0, 44);
@@ -139,6 +143,20 @@ namespace WeighbridgeAdmin.Forms
             this.tbbDelete.Text = "&Delete";
             this.tbbDelete.ToolTipText = "Delete the selected customer";
             this.tbbDelete.Click += new System.EventHandler(this.tbbDelete_Click);
+            //
+            // tbbSep0
+            //
+            this.tbbSep0.Name = "tbbSep0";
+            this.tbbSep0.Size = new System.Drawing.Size(6, 25);
+            //
+            // tbbAccount
+            //
+            this.tbbAccount.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.tbbAccount.Name = "tbbAccount";
+            this.tbbAccount.Size = new System.Drawing.Size(58, 22);
+            this.tbbAccount.Text = "&Account";
+            this.tbbAccount.ToolTipText = "Open the full account screen for the selected customer (F6)";
+            this.tbbAccount.Click += new System.EventHandler(this.tbbAccount_Click);
             //
             // tbbSep1
             //
@@ -376,6 +394,8 @@ namespace WeighbridgeAdmin.Forms
         private System.Windows.Forms.ToolStripButton tbbNew;
         private System.Windows.Forms.ToolStripButton tbbEdit;
         private System.Windows.Forms.ToolStripButton tbbDelete;
+        private System.Windows.Forms.ToolStripSeparator tbbSep0;
+        private System.Windows.Forms.ToolStripButton tbbAccount;
         private System.Windows.Forms.ToolStripSeparator tbbSep1;
         private System.Windows.Forms.ToolStripButton tbbRefresh;
         private System.Windows.Forms.Panel pnlSearch;

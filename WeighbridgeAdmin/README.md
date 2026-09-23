@@ -21,7 +21,7 @@ through plain ADO.NET.
 | .NET Framework 4.8 runtime | Needed to **run** the exe. Ships with Windows 10 1903+ / Windows 11 |
 | SQL Server | The shipped `app.config` points at a local **SQL Server Express** instance (`localhost\SQLEXPRESS`). LocalDB works just as well — see the alternative below |
 | `sqlcmd` or SQL Server Management Studio (SSMS) | To run the create script |
-| DevExpress WinForms 26.1 | The two list screens use `GridControl`. `DevExpress.Win.Grid` 26.1.4 restores straight from **nuget.org** — no DevExpress install, feed or account is needed to build. See the licence note under *Build and run* |
+| DevExpress WinForms 26.1 | The two list screens and the customer account screen use `GridControl`. `DevExpress.Win.Grid` 26.1.4 restores straight from **nuget.org** — no DevExpress install, feed or account is needed to build. See the licence note under *Build and run* |
 
 Open `WeighbridgeAdmin.sln` in the repository root, or the `WeighbridgeAdmin.csproj` in this folder — both work.
 
@@ -65,11 +65,14 @@ sqlcmd -S "(localdb)\MSSQLLocalDB" -d WeighbridgeDb -i Database\CreateDatabase.s
 Create a database named `WeighbridgeDb`, then open `Database/CreateDatabase.sql` and execute it
 with that database selected.
 
-> **The script is destructive.** It drops and recreates `WeighTickets`, `Vehicles`, `Products`,
-> `Customers` and `Counters` every time it runs. Re-running it wipes anything you have entered.
+> **The script is destructive.** It drops and recreates `ContractRates`, `CustomerContacts`,
+> `Users`, `SecurityProfilePrivileges`, `SecurityProfiles`, `WeighTickets`, `Vehicles`,
+> `Products`, `Customers` and `Counters` every time it runs. Re-running it wipes anything you
+> have entered.
 
-**What you get:** 15 customers, 8 products, 20 vehicles, 30 weigh tickets, and a `Counters` row
-that starts ticket numbering at `WB100031`.
+**What you get:** 15 customers, 8 products, 20 vehicles, 30 weigh tickets, a `Counters` row
+that starts ticket numbering at `WB100031`, three operator logins on three security profiles
+(see "Sign in" below), plus 12 customer contacts and 9 contract rates for the account screen.
 
 ---
 
@@ -179,21 +182,48 @@ $cn.Open(); $cn.State; $cn.Close()
 
 ---
 
+## 4. Sign in
+
+The first thing the application shows is a small **Sign In** dialog — before the main window,
+and after the configuration and database checks. There is no password: this is a shop-floor
+terminal, so the operator just picks their own name off the dropdown. The profile that name
+works under appears underneath, and it is what decides which menus, toolbar buttons and
+fields are available for the rest of the session. **Exit** closes without starting the app.
+
+| Pick | Profile | What the session can do |
+|---|---|---|
+| **D. McGrath** | Weighbridge Operator | Customer list, add and edit customers, vehicle lookup, ticket list, raise and save weigh tickets. Delete is greyed. The price per tonne is read-only at the product's price-list rate. |
+| **S. Patel** | Administrator | Everything, including deleting customers and overtyping the price per tonne. |
+| **J. Reid** | Read Only | Customer list, vehicle lookup, ticket list and ticket view. New/Edit/Delete customer and New Weigh Ticket are all greyed. |
+
+Signing in as a different operator means restarting the application — the privileges are read
+once at sign-on and there is no "switch user".
+
+If a command is greyed out, the profile does not grant it. If you reach one anyway — through a
+shortcut key or a double-click that the screen forgot to disable — you get a
+*"You do not have the 'X' privilege."* box instead. Both checks are deliberate.
+
+A dialog reading *"The operator list could not be read"* on start-up means the security tables
+are missing: re-run `Database\CreateDatabase.sql`.
+
+---
+
 ## Using the application
 
 The main window is an MDI parent with a menu bar and a status bar (operator name + live clock).
+What is enabled on it depends on who signed in — see the table above.
 
-| Menu | Item | What it does |
-|---|---|---|
-| File | New Weigh Ticket (`Ctrl+N`) | Opens the weigh ticket wizard |
-| File | Exit | Confirms, then closes |
-| Customers | Customer List | Browsable, searchable customer grid (only one instance is ever opened) |
-| Customers | New Customer... | Add-customer dialog |
-| Vehicles | Vehicle Lookup... | Search dialog; shows the picked vehicle's details |
-| Tickets | New Weigh Ticket | Same as File → New Weigh Ticket |
-| Tickets | Ticket List (`Ctrl+L`) | Browse saved weigh tickets (only one instance is ever opened) |
-| Tickets | Cascade Windows / Tile Horizontally | MDI layout |
-| Help | About... | Version box |
+| Menu | Item | What it does | Privilege |
+|---|---|---|---|
+| File | New Weigh Ticket (`Ctrl+N`) | Opens the weigh ticket wizard | `TICKET_CREATE` — **not** greyed here, only checked in the handler |
+| File | Exit | Confirms, then closes | — |
+| Customers | Customer List | Browsable, searchable customer grid (only one instance is ever opened) | `CUSTOMER_VIEW` |
+| Customers | New Customer... | Add-customer dialog | `CUSTOMER_EDIT` |
+| Vehicles | Vehicle Lookup... | Search dialog; shows the picked vehicle's details | `VEHICLE_VIEW` |
+| Tickets | New Weigh Ticket | Same as File → New Weigh Ticket | `TICKET_CREATE` |
+| Tickets | Ticket List (`Ctrl+L`) | Browse saved weigh tickets (only one instance is ever opened) | `TICKET_VIEW` |
+| Tickets | Cascade Windows / Tile Horizontally | MDI layout | — |
+| Help | About... | Version box | — |
 
 ### Weigh ticket wizard
 
@@ -204,7 +234,9 @@ is re-validated on Save.
    vehicle fills in the description, default tare and max gross, and selects the vehicle's customer.
 2. **Weights** — gross and tare; net and net-tonnes update live. Gross over the vehicle's max gross
    shows a red warning and prompts for confirmation on Next.
-3. **Charges** — product selection defaults the price per tonne (overtypeable). Subtotal / GST /
+3. **Charges** — product selection defaults the price per tonne. It is overtypeable only with the
+   `TICKET_PRICE_OVERRIDE` privilege; without it the box is read-only and greyed at the price-list
+   rate, and Save refuses any price that does not match the product default. Subtotal / GST /
    total recalculate on every change. GST is charged at the configured `GstRate` and only on
    products flagged `GstApplicable`.
 4. **Review** — read-only summary, notes and ticket status (`Open` / `Completed` / `Void`).
@@ -258,6 +290,45 @@ still references it — mark it inactive instead.
 The same grid features apply here: header filters, sorting, and grouping by dragging a column
 header onto the group panel.
 
+New and Edit need `CUSTOMER_EDIT`; Delete needs `CUSTOMER_DELETE`, which only the Administrator
+profile holds. The shortcut keys go through the same handlers as the buttons, so `F2` on a greyed
+Edit gets the *"You do not have the..."* box rather than opening the dialog.
+
+### Customer account
+
+**Account** on the customer list toolbar (or `F6`) opens the full account screen for the selected
+customer, as an MDI child rather than a dialog — one per customer, and you can leave it open
+beside the list. It is the deepest screen in the application.
+
+The top half is the account itself: code, name, A.B.N., contact details, credit limit, and two
+address blocks — the trading address, and a postal address that can be left blank to bill to the
+trading one. Under it are three tabs:
+
+- **Contacts** — an editable grid. Type in the bottom row to add someone, select a row and press
+  `Delete` to remove them. Position is a dropdown; Phone and Email are free text and the email is
+  format-checked as you leave the cell. Exactly one contact has to be ticked as the primary, and
+  ticking one unticks the rest.
+- **Contract Rates** — an editable grid of negotiated prices per tonne, each with a product, a
+  rate and a date window (leave *Effective to* blank for an open-ended rate). The rate cell only
+  accepts digits. Two rates for the same product are not allowed to overlap in time, and you are
+  told as soon as you leave the row if they do. The rate in force today is shown in black and
+  expired ones in grey, with a totals line underneath.
+- **Vehicles** — read only. Vehicles belong to the vehicle master, not to the account.
+
+All three tabs are DevExpress `GridControl`s on the same WXI skin as the list screens, bound
+straight to the working lists of contacts, rates and vehicles. The two editable grids show a new
+item row at the bottom, and a refused value keeps its cell open with an error icon until it is
+fixed or `Esc` undoes it. They have no filter row or group panel, because the search box above
+each grid already does that job.
+
+Everything on the screen saves together with one **Save**, which stays greyed until something
+actually changes. Closing with unsaved changes prompts to save, discard or stay.
+
+Contacts need `CUSTOMER_EDIT`. Contract rates need `TICKET_PRICE_OVERRIDE` — the same privilege
+that lets an operator charge a weigh ticket at something other than the price-list rate — so for
+the Weighbridge Operator profile the rates tab is greyed and relabelled *(read only)* while the
+contacts beside it stay editable.
+
 ---
 
 ## Project layout
@@ -265,7 +336,7 @@ header onto the group panel.
 ```
 WeighbridgeAdmin.csproj      SDK-style project, net48, WinForms
 app.config                   Connection string + app settings
-Program.cs                   Entry point; DB reachability check before showing the UI
+Program.cs                   Entry point; DB reachability check, then sign-on, then the UI
 
 Model/                       Plain data holders, no behaviour
   Customer.cs                Customer master
@@ -273,12 +344,28 @@ Model/                       Plain data holders, no behaviour
   Product.cs                 Product + price per tonne + GST flag
   WeighTicket.cs             Ticket; also TicketStatus string constants
   WeighTicketSummary.cs      Read-only ticket row with rego/customer/product joined on
+  UserAccount.cs             Operator login, with the profile name joined on
+  SecurityProfile.cs         Job role (nothing constructs one yet)
+  CustomerContact.cs         Someone to ring at a customer
+  ContractRate.cs            Negotiated rate for one product over a date window
+
+Security/
+  Privileges.cs              One const string per privilege name
+  SecurityContext.cs         Static signed-on session: SignIn, HasPrivilege, Demand
+
+Controls/                    Reusable user controls
+  AddressBlock.*             Address / suburb / state / postcode in a GroupBox
+  SearchBox.*                Caption, search box, Clear button, record count
+  CustomerHeaderPanel.*      Account fields plus TWO AddressBlock instances
 
 Data/
   Repository.cs              All data access. Singleton via Repository.Current.
                              Inline SQL, one connection per call, manual reader mapping.
 
 Forms/
+  LoginForm.*                Sign-on dialog: operator dropdown, Sign In / Exit
+  BaseEntryForm.*            Base class, not a screen: header, Save/Close, dirty flag
+  CustomerAccountForm.*      Inherits BaseEntryForm; header panel + 3 tabs, 2 editable grids (DevExpress GridControl)
   MainForm.*                 MDI parent: menu, status bar, clock timer
   CustomerListForm.*         Customer browse grid (DevExpress GridControl) + toolbar + search
   CustomerEditForm.*         Add/edit customer dialog with ErrorProvider validation
@@ -322,5 +409,42 @@ These are deliberate characteristics of the code, worth knowing before you chang
   rounding). The demo data stores those exact values rather than recomputing in T-SQL, because
   `ROUND()` rounds half away from zero and disagrees by one cent on 6 of the 30 seeded rows. Don't
   "fix" the seed totals in SQL.
-- **The logged-in operator is hard-coded** — `Repository.CurrentUserName` returns a fixed string.
-  There is no authentication.
+- **There is authorisation but no authentication.** `LoginForm` picks an operator out of
+  `dbo.Users`; `SecurityContext.SignIn` reads that profile's grants out of
+  `dbo.SecurityProfilePrivileges` once into a `HashSet<string>` and holds them statically for
+  the life of the process. Nothing verifies that the person at the keyboard is who they picked,
+  and nothing re-reads the grants — changing a profile in the database needs a restart.
+  `Repository.CurrentUserName` composes the status-bar string out of that session.
+- **Every gated command is checked twice.** The control is disabled in the form's `Load` from
+  `SecurityContext.HasPrivilege`, and the handler opens with `SecurityContext.Demand`, caught
+  and turned into a message box. Note that `CustomerListForm.ReloadGrid` and
+  `TicketListForm.ReloadGrid` re-set their toolbar buttons from the row count on every load, so
+  the privilege has to be ANDed in there rather than only in `Load` — set it in `Load` alone and
+  the next refresh quietly switches the button back on.
+- **One rule is on a value, not a control.** `WeighTicketForm.numPrice` goes `ReadOnly` (with
+  `Increment = 0`, because `ReadOnly` alone leaves the spin buttons working) without
+  `TICKET_PRICE_OVERRIDE`, and `btnSave_Click` separately refuses to save a price that differs
+  from the product's price-list rate. The control state is the courtesy; the value check is the
+  rule.
+- **`CustomerAccountForm` inherits `BaseEntryForm`.** Its Save and Close buttons, header labels,
+  dirty flag and close prompt are not in its own designer file — they come from the base. The
+  base declares those controls `protected` rather than `private` for exactly that reason, and
+  drives the screen through three `virtual` hooks: `OnLoadRecord`, `OnValidateEntry` and
+  `OnSaveRecord`. It is currently the only screen that inherits it; a second one would be the
+  obvious next thing to add.
+- **Save is enabled from two sources ANDed together** — `IsDirty && AllowSave`. The derived
+  screen sets `AllowSave` from the operator's privileges once, and every edit flips `IsDirty`.
+  Forget either and the button is wrong, which is the same trap as the toolbar buttons above.
+- **Two save paths against `dbo.Customers`.** `SaveCustomer` (the old edit dialog) does not
+  mention the four postal-address columns, so it cannot blank them; `SaveCustomerAccount` (the
+  account screen) writes all of them. Adding the postal address to the older statement would
+  look tidier and would quietly wipe data.
+- **The editable grids are bound straight to the working lists** (`BindingList<CustomerContact>`
+  and `BindingList<ContractRate>`), so a posted cell is already on the model object. The search
+  boxes filter the views through `CustomRowFilter` and never touch the lists.
+  Deleted rows exist only as two `List<int>` fields of ids until Save runs. There is no
+  transaction around the save: header, contacts and rates each go through their own connection,
+  exactly like the rest of the application.
+- **Two business rules live only in grid event handlers** — one primary contact per customer,
+  and no overlapping date windows for the same product. Neither is a database constraint. If you
+  are reading the schema to work out the rules, you will miss both.

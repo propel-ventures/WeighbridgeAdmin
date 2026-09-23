@@ -20,6 +20,14 @@ namespace WeighbridgeAdmin.Model
         public decimal CreditLimit { get; set; }
         public bool IsActive { get; set; }
 
+        // Postal address.  Added with the account screen - the older customer
+        // edit dialog knows nothing about these four and SaveCustomer does not
+        // write them, so editing a customer there leaves them alone.
+        public string PostalAddress { get; set; }
+        public string PostalSuburb { get; set; }
+        public string PostalState { get; set; }
+        public string PostalPostcode { get; set; }
+
         public Customer()
         {
             this.Code = "";
@@ -33,6 +41,10 @@ namespace WeighbridgeAdmin.Model
             this.Email = "";
             this.CreditLimit = 0m;
             this.IsActive = true;
+            this.PostalAddress = "";
+            this.PostalSuburb = "";
+            this.PostalState = "QLD";
+            this.PostalPostcode = "";
         }
 
         // Used by the customer combo box on the weigh ticket screen.

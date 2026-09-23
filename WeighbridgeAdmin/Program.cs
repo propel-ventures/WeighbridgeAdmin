@@ -6,6 +6,7 @@ using DevExpress.LookAndFeel;
 using DevExpress.XtraEditors;
 using WeighbridgeAdmin.Data;
 using WeighbridgeAdmin.Forms;
+using WeighbridgeAdmin.Security;
 
 namespace WeighbridgeAdmin
 {
@@ -59,6 +60,19 @@ namespace WeighbridgeAdmin
                     MessageBoxButtons.OK, MessageBoxIcon.Stop);
                 return;
             }
+
+            // Sign on before anything else is shown.  The privileges that come
+            // back with the operator drive what the screens will let them do,
+            // so nothing can open until this has been through.
+            LoginForm login = new LoginForm();
+            if (login.ShowDialog() != DialogResult.OK)
+            {
+                login.Dispose();
+                return;
+            }
+
+            SecurityContext.SignIn(login.SelectedUser);
+            login.Dispose();
 
             Application.Run(new MainForm());
         }

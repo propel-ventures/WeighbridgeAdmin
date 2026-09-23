@@ -6,6 +6,7 @@ using DevExpress.XtraGrid.Views.Grid;
 using DevExpress.XtraGrid.Views.Grid.ViewInfo;
 using WeighbridgeAdmin.Data;
 using WeighbridgeAdmin.Model;
+using WeighbridgeAdmin.Security;
 
 namespace WeighbridgeAdmin.Forms
 {
@@ -96,7 +97,7 @@ namespace WeighbridgeAdmin.Forms
 
             ShowTotals(list);
 
-            this.tbbView.Enabled = (list.Count > 0);
+            this.tbbView.Enabled = (list.Count > 0) && SecurityContext.HasPrivilege(Privileges.TicketView);
         }
 
         /// <summary>Index 0 of the combo is "(All statuses)", which filters on nothing.</summary>
@@ -204,6 +205,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void tbbView_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.TicketView);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             WeighTicketSummary s = GetSelectedTicket();
             if (s == null)
             {

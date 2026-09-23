@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using WeighbridgeAdmin.Data;
 using WeighbridgeAdmin.Model;
+using WeighbridgeAdmin.Security;
 
 namespace WeighbridgeAdmin.Forms
 {
@@ -25,6 +26,10 @@ namespace WeighbridgeAdmin.Forms
 
         private void CustomerEditForm_Load(object sender, EventArgs e)
         {
+            // A profile without CUSTOMER_EDIT can look at the record but not
+            // write it back, so the dialog can only be cancelled.
+            this.btnOK.Enabled = SecurityContext.HasPrivilege(Privileges.CustomerEdit);
+
             if (this.CustomerToEdit == null)
             {
                 // ADD MODE
@@ -66,6 +71,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void btnOK_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.CustomerEdit);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             this.errCustomer.Clear();
 
             bool ok = true;

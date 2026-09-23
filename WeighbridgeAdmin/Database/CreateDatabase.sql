@@ -3,7 +3,8 @@
    Target: SQL Server 2012 or later (LocalDB, Express or full)
 
    Drops and recreates every table, then loads the standard demo data
-   (15 customers, 20 vehicles, 8 products, 30 weigh tickets).
+   (15 customers, 20 vehicles, 8 products, 30 weigh tickets, plus the
+   three security profiles and three operator logins).
 
    Run in SSMS against the WeighbridgeDb database, or from a prompt:
      sqlcmd -S (localdb)\MSSQLLocalDB -d WeighbridgeDb -i CreateDatabase.sql
@@ -15,6 +16,11 @@ SET QUOTED_IDENTIFIER ON;
 GO
 
 /* ---------- drop in dependency order ---------- */
+IF OBJECT_ID('dbo.Users', 'U') IS NOT NULL DROP TABLE dbo.Users;
+IF OBJECT_ID('dbo.SecurityProfilePrivileges', 'U') IS NOT NULL DROP TABLE dbo.SecurityProfilePrivileges;
+IF OBJECT_ID('dbo.SecurityProfiles', 'U') IS NOT NULL DROP TABLE dbo.SecurityProfiles;
+IF OBJECT_ID('dbo.ContractRates', 'U') IS NOT NULL DROP TABLE dbo.ContractRates;
+IF OBJECT_ID('dbo.CustomerContacts', 'U') IS NOT NULL DROP TABLE dbo.CustomerContacts;
 IF OBJECT_ID('dbo.WeighTickets', 'U') IS NOT NULL DROP TABLE dbo.WeighTickets;
 IF OBJECT_ID('dbo.Vehicles', 'U') IS NOT NULL DROP TABLE dbo.Vehicles;
 IF OBJECT_ID('dbo.Products', 'U') IS NOT NULL DROP TABLE dbo.Products;
@@ -35,6 +41,10 @@ CREATE TABLE dbo.Customers (
     Phone       VARCHAR(20)            NULL,
     Email       VARCHAR(80)            NULL,
     CreditLimit DECIMAL(12,2)      NOT NULL CONSTRAINT DF_Customers_CreditLimit DEFAULT (0),
+    PostalAddress  VARCHAR(60)         NULL,
+    PostalSuburb   VARCHAR(40)         NULL,
+    PostalState    VARCHAR(3)          NULL,
+    PostalPostcode VARCHAR(4)          NULL,
     IsActive    BIT                NOT NULL CONSTRAINT DF_Customers_IsActive    DEFAULT (1),
     CONSTRAINT PK_Customers      PRIMARY KEY CLUSTERED (Id),
     CONSTRAINT UQ_Customers_Code UNIQUE (Code)
@@ -107,6 +117,84 @@ CREATE TABLE dbo.Counters (
     NextValue   INT         NOT NULL,
     CONSTRAINT PK_Counters PRIMARY KEY CLUSTERED (CounterName)
 );
+GO
+
+/* ---------- SecurityProfiles ---------- */
+/* One row per job role.  The privileges that go with the role live in
+   SecurityProfilePrivileges - a user gets whatever their profile grants. */
+CREATE TABLE dbo.SecurityProfiles (
+    ProfileId   INT IDENTITY(1,1) NOT NULL,
+    ProfileName VARCHAR(40)       NOT NULL,
+    Description VARCHAR(120)          NULL,
+    CONSTRAINT PK_SecurityProfiles      PRIMARY KEY CLUSTERED (ProfileId),
+    CONSTRAINT UQ_SecurityProfiles_Name UNIQUE (ProfileName)
+);
+GO
+
+/* ---------- SecurityProfilePrivileges ---------- */
+/* Grant rows.  A privilege the profile does not hold simply has no row. */
+CREATE TABLE dbo.SecurityProfilePrivileges (
+    ProfileId     INT         NOT NULL,
+    PrivilegeName VARCHAR(40) NOT NULL,
+    CONSTRAINT PK_SecurityProfilePrivileges  PRIMARY KEY CLUSTERED (ProfileId, PrivilegeName),
+    CONSTRAINT FK_ProfilePrivileges_Profiles FOREIGN KEY (ProfileId) REFERENCES dbo.SecurityProfiles (ProfileId)
+);
+GO
+
+/* ---------- Users ---------- */
+/* No password column - this is a shop floor terminal and the operator just
+   picks their own name off the sign on dialog. */
+CREATE TABLE dbo.Users (
+    UserId    INT IDENTITY(1,1) NOT NULL,
+    UserName  VARCHAR(20)       NOT NULL,
+    FullName  VARCHAR(60)       NOT NULL,
+    ProfileId INT               NOT NULL,
+    IsActive  BIT               NOT NULL CONSTRAINT DF_Users_IsActive DEFAULT (1),
+    CONSTRAINT PK_Users          PRIMARY KEY CLUSTERED (UserId),
+    CONSTRAINT UQ_Users_UserName UNIQUE (UserName),
+    CONSTRAINT FK_Users_Profiles FOREIGN KEY (ProfileId) REFERENCES dbo.SecurityProfiles (ProfileId)
+);
+GO
+
+/* ---------- CustomerContacts ---------- */
+/* Who to ring at the customer.  At most one row per customer is flagged as
+   the primary contact.  That rule is kept by the account screen while the
+   operator is keying, not by a constraint - the old system never had one. */
+CREATE TABLE dbo.CustomerContacts (
+    ContactId   INT IDENTITY(1,1) NOT NULL,
+    CustomerId  INT               NOT NULL,
+    ContactName VARCHAR(60)       NOT NULL,
+    Position    VARCHAR(40)           NULL,
+    Phone       VARCHAR(20)           NULL,
+    Email       VARCHAR(80)           NULL,
+    IsPrimary   BIT               NOT NULL CONSTRAINT DF_Contacts_Primary DEFAULT (0),
+    CONSTRAINT PK_CustomerContacts   PRIMARY KEY CLUSTERED (ContactId),
+    CONSTRAINT FK_Contacts_Customers FOREIGN KEY (CustomerId) REFERENCES dbo.Customers (Id)
+);
+GO
+CREATE INDEX IX_CustomerContacts_Customer ON dbo.CustomerContacts (CustomerId);
+GO
+
+/* ---------- ContractRates ---------- */
+/* Negotiated price per tonne for one customer and one product over a date
+   window.  EffectiveTo NULL means open ended.  Nothing stops two windows for
+   the same product overlapping at the database level - the account screen
+   checks for that as the operator keys, which is where the old system did it. */
+CREATE TABLE dbo.ContractRates (
+    RateId        INT IDENTITY(1,1) NOT NULL,
+    CustomerId    INT               NOT NULL,
+    ProductId     INT               NOT NULL,
+    RatePerTonne  DECIMAL(10,2)     NOT NULL CONSTRAINT DF_Rates_Rate DEFAULT (0),
+    EffectiveFrom DATETIME          NOT NULL,
+    EffectiveTo   DATETIME              NULL,
+    Notes         VARCHAR(120)          NULL,
+    CONSTRAINT PK_ContractRates   PRIMARY KEY CLUSTERED (RateId),
+    CONSTRAINT FK_Rates_Customers FOREIGN KEY (CustomerId) REFERENCES dbo.Customers (Id),
+    CONSTRAINT FK_Rates_Products  FOREIGN KEY (ProductId)  REFERENCES dbo.Products (Id),
+    CONSTRAINT CK_Rates_Dates     CHECK (EffectiveTo IS NULL OR EffectiveTo >= EffectiveFrom)
+);
+GO
+CREATE INDEX IX_ContractRates_Customer ON dbo.ContractRates (CustomerId);
 GO
 
 /* =================== demo data =================== */
@@ -236,4 +324,82 @@ SET IDENTITY_INSERT dbo.WeighTickets OFF;
 GO
 
 INSERT INTO dbo.Counters (CounterName, NextValue) VALUES ('TICKET', 100031);
+GO
+
+SET IDENTITY_INSERT dbo.SecurityProfiles ON;
+INSERT INTO dbo.SecurityProfiles (ProfileId, ProfileName, Description) VALUES (1, 'Administrator', 'Full access - site administrator and supervisors');
+INSERT INTO dbo.SecurityProfiles (ProfileId, ProfileName, Description) VALUES (2, 'Weighbridge Operator', 'Day to day operator - raises tickets and maintains customers');
+INSERT INTO dbo.SecurityProfiles (ProfileId, ProfileName, Description) VALUES (3, 'Read Only', 'Enquiry only - accounts and gatehouse staff');
+SET IDENTITY_INSERT dbo.SecurityProfiles OFF;
+GO
+
+/* Administrator - everything. */
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (1, 'CUSTOMER_VIEW');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (1, 'CUSTOMER_EDIT');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (1, 'CUSTOMER_DELETE');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (1, 'VEHICLE_VIEW');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (1, 'TICKET_VIEW');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (1, 'TICKET_CREATE');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (1, 'TICKET_PRICE_OVERRIDE');
+
+/* Weighbridge Operator - no deletes, and no pricing off the price list. */
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (2, 'CUSTOMER_VIEW');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (2, 'CUSTOMER_EDIT');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (2, 'VEHICLE_VIEW');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (2, 'TICKET_VIEW');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (2, 'TICKET_CREATE');
+
+/* Read Only - look, do not touch. */
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (3, 'CUSTOMER_VIEW');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (3, 'VEHICLE_VIEW');
+INSERT INTO dbo.SecurityProfilePrivileges (ProfileId, PrivilegeName) VALUES (3, 'TICKET_VIEW');
+GO
+
+SET IDENTITY_INSERT dbo.Users ON;
+INSERT INTO dbo.Users (UserId, UserName, FullName, ProfileId, IsActive) VALUES (1, 'dmcgrath', 'D. McGrath', 2, 1);
+INSERT INTO dbo.Users (UserId, UserName, FullName, ProfileId, IsActive) VALUES (2, 'sadmin', 'S. Patel', 1, 1);
+INSERT INTO dbo.Users (UserId, UserName, FullName, ProfileId, IsActive) VALUES (3, 'jreid', 'J. Reid', 3, 1);
+SET IDENTITY_INSERT dbo.Users OFF;
+GO
+
+/* Postal addresses.  Only some customers have one - the rest bill to the
+   trading address, and the account screen shows the postal block empty. */
+UPDATE dbo.Customers SET PostalAddress = 'PO Box 417',  PostalSuburb = 'Beenleigh',     PostalState = 'QLD', PostalPostcode = '4207' WHERE Code = 'ANDCON';
+UPDATE dbo.Customers SET PostalAddress = 'PO Box 1188', PostalSuburb = 'Strathpine',    PostalState = 'QLD', PostalPostcode = '4500' WHERE Code = 'BALEXC';
+UPDATE dbo.Customers SET PostalAddress = 'PO Box 62',   PostalSuburb = 'Virginia',      PostalState = 'QLD', PostalPostcode = '4014' WHERE Code = 'CARHAU';
+UPDATE dbo.Customers SET PostalAddress = 'PO Box 3301', PostalSuburb = 'Toowoomba',     PostalState = 'QLD', PostalPostcode = '4350' WHERE Code = 'DARCIV';
+UPDATE dbo.Customers SET PostalAddress = 'PO Box 904',  PostalSuburb = 'Maitland',      PostalState = 'NSW', PostalPostcode = '2320' WHERE Code = 'HUNTRA';
+UPDATE dbo.Customers SET PostalAddress = 'PO Box 2215', PostalSuburb = 'Logan Central', PostalState = 'QLD', PostalPostcode = '4114' WHERE Code = 'LOGANC';
+UPDATE dbo.Customers SET PostalAddress = 'PO Box 77',   PostalSuburb = 'Redcliffe',     PostalState = 'QLD', PostalPostcode = '4020' WHERE Code = 'OAKLEY';
+GO
+
+SET IDENTITY_INSERT dbo.CustomerContacts ON;
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (1, 1, 'Raelene Anderson', 'Accounts', '(07) 3807 4411', 'accounts@andersonconcrete.com.au', 1);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (2, 1, 'Wayne Anderson', 'Director', '0412 556 018', 'wayne@andersonconcrete.com.au', 0);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (3, 2, 'Kim Ballantyne', 'Owner', '0418 220 774', 'kim@ballantyneexc.com.au', 1);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (4, 3, 'Trish Carmody', 'Accounts', '(07) 3865 2200', 'accounts@carmodyhaulage.com.au', 1);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (5, 3, 'Dean Foley', 'Dispatch', '(07) 3865 2204', 'dispatch@carmodyhaulage.com.au', 0);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (6, 3, 'Ian Carmody', 'Director', '0407 118 332', '', 0);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (7, 4, 'Suzanne Whitlock', 'Site Manager', '(07) 4634 7712', 'admin@ddcivil.com.au', 1);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (8, 8, 'Greg Naylor', 'Operations', '(02) 4932 5510', 'ops@huntervalleytransport.com.au', 1);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (9, 8, 'Marika Toloa', 'Accounts', '(02) 4932 5514', 'accounts@huntervalleytransport.com.au', 0);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (10, 12, 'Peter Nguyen', 'Procurement', '(07) 3412 6600', 'procurement@logancivil.com.au', 1);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (11, 12, 'Alana Brice', 'Accounts', '(07) 3412 6612', '', 0);
+INSERT INTO dbo.CustomerContacts (ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary) VALUES (12, 15, 'Rod Oakley', 'Owner', '(07) 3284 7150', 'accounts@oakleyroad.com.au', 1);
+SET IDENTITY_INSERT dbo.CustomerContacts OFF;
+GO
+
+/* Contract rates.  The Logan City road base rate is the one the demo tickets
+   already use - WB100010 was raised at 26.50 against a list price of 28.90. */
+SET IDENTITY_INSERT dbo.ContractRates ON;
+INSERT INTO dbo.ContractRates (RateId, CustomerId, ProductId, RatePerTonne, EffectiveFrom, EffectiveTo, Notes) VALUES (1, 12, 3, 26.50, '2025-07-01', NULL, 'Logan City panel contract LC-2025-08');
+INSERT INTO dbo.ContractRates (RateId, CustomerId, ProductId, RatePerTonne, EffectiveFrom, EffectiveTo, Notes) VALUES (2, 12, 2, 37.00, '2025-07-01', NULL, 'Logan City panel contract LC-2025-08');
+INSERT INTO dbo.ContractRates (RateId, CustomerId, ProductId, RatePerTonne, EffectiveFrom, EffectiveTo, Notes) VALUES (3, 3, 1, 40.00, '2025-01-01', '2025-06-30', 'Superseded - see the July 2025 rate');
+INSERT INTO dbo.ContractRates (RateId, CustomerId, ProductId, RatePerTonne, EffectiveFrom, EffectiveTo, Notes) VALUES (4, 3, 1, 41.25, '2025-07-01', NULL, 'Annual review July 2025');
+INSERT INTO dbo.ContractRates (RateId, CustomerId, ProductId, RatePerTonne, EffectiveFrom, EffectiveTo, Notes) VALUES (5, 3, 3, 27.40, '2025-07-01', NULL, 'Volume commitment 20kt');
+INSERT INTO dbo.ContractRates (RateId, CustomerId, ProductId, RatePerTonne, EffectiveFrom, EffectiveTo, Notes) VALUES (6, 8, 2, 38.50, '2025-07-01', NULL, 'Hunter Valley cartage agreement');
+INSERT INTO dbo.ContractRates (RateId, CustomerId, ProductId, RatePerTonne, EffectiveFrom, EffectiveTo, Notes) VALUES (7, 4, 3, 28.00, '2025-07-01', '2026-06-30', 'Darling Downs schedule of rates');
+INSERT INTO dbo.ContractRates (RateId, CustomerId, ProductId, RatePerTonne, EffectiveFrom, EffectiveTo, Notes) VALUES (8, 1, 2, 38.75, '2025-07-01', NULL, '');
+INSERT INTO dbo.ContractRates (RateId, CustomerId, ProductId, RatePerTonne, EffectiveFrom, EffectiveTo, Notes) VALUES (9, 15, 4, 31.50, '2025-08-01', NULL, 'Oakley Road - concrete sand only');
+SET IDENTITY_INSERT dbo.ContractRates OFF;
 GO

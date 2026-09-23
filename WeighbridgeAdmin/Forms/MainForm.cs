@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using WeighbridgeAdmin.Data;
 using WeighbridgeAdmin.Model;
+using WeighbridgeAdmin.Security;
 
 namespace WeighbridgeAdmin.Forms
 {
@@ -23,6 +24,16 @@ namespace WeighbridgeAdmin.Forms
             // refreshed by the timer.
             this.lblStatusUser.Text = "User: " + Repository.Current.CurrentUserName;
             this.lblStatusDate.Text = DateTime.Now.ToString("dddd, d MMMM yyyy  h:mm:ss tt");
+
+            // Privileges do not change while the program is running, so the
+            // menu is switched on and off once here.  Each handler checks again
+            // on the way in - a shortcut key can still reach a command whose
+            // menu item is greyed.
+            this.mnuCustomersList.Enabled = SecurityContext.HasPrivilege(Privileges.CustomerView);
+            this.mnuCustomersNew.Enabled = SecurityContext.HasPrivilege(Privileges.CustomerEdit);
+            this.mnuVehiclesLookup.Enabled = SecurityContext.HasPrivilege(Privileges.VehicleView);
+            this.mnuTicketsNew.Enabled = SecurityContext.HasPrivilege(Privileges.TicketCreate);
+            this.mnuTicketsList.Enabled = SecurityContext.HasPrivilege(Privileges.TicketView);
         }
 
         private void timerClock_Tick(object sender, EventArgs e)
@@ -41,6 +52,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void mnuCustomersList_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.CustomerView);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             // Only ever allow one customer list open - if it is already there
             // just bring it to the front.
             for (int i = 0; i < this.MdiChildren.Length; i++)
@@ -59,6 +81,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void mnuCustomersNew_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.CustomerEdit);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             CustomerEditForm dlg = new CustomerEditForm();
             dlg.CustomerToEdit = null;
             if (dlg.ShowDialog(this) == DialogResult.OK)
@@ -82,6 +115,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void mnuVehiclesLookup_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.VehicleView);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             VehicleLookupDialog dlg = new VehicleLookupDialog();
             if (dlg.ShowDialog(this) == DialogResult.OK)
             {
@@ -107,6 +151,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void mnuTicketsNew_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.TicketCreate);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             WeighTicketForm frm = new WeighTicketForm();
             frm.MdiParent = this;
             frm.Show();
@@ -114,6 +169,17 @@ namespace WeighbridgeAdmin.Forms
 
         private void mnuTicketsList_Click(object sender, EventArgs e)
         {
+            try
+            {
+                SecurityContext.Demand(Privileges.TicketView);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show("You do not have the '" + ex.Message + "' privilege.", "Access denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             // One ticket list at a time, same as the customer list.
             TicketListForm existing = FindTicketList();
             if (existing != null)

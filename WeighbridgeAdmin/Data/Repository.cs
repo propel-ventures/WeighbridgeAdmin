@@ -5,6 +5,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
 using WeighbridgeAdmin.Model;
+using WeighbridgeAdmin.Security;
 
 namespace WeighbridgeAdmin.Data
 {
@@ -48,10 +49,22 @@ namespace WeighbridgeAdmin.Data
             }
         }
 
-        /// <summary>Operator that is "logged in".  Shown on the main status bar.</summary>
+        /// <summary>
+        /// The signed on operator, the way the status bar has always shown it -
+        /// NAME in capitals with the security profile in brackets after it.
+        /// Empty until the sign on dialog has been through, which only happens
+        /// if something asks before Program.Main has got that far.
+        /// </summary>
         public string CurrentUserName
         {
-            get { return "D.MCGRATH (Weighbridge Operator)"; }
+            get
+            {
+                if (SecurityContext.CurrentUser == null)
+                {
+                    return "(not signed on)";
+                }
+                return SecurityContext.FullName.ToUpper() + " (" + SecurityContext.ProfileName + ")";
+            }
         }
 
         /// <summary>
@@ -150,6 +163,15 @@ namespace WeighbridgeAdmin.Data
         private const string CustomerColumns =
             "Id, Code, Name, ABN, Address, Suburb, State, Postcode, Phone, Email, CreditLimit, IsActive";
 
+        /// <summary>
+        /// The same customer with the postal address on the end.  Only the
+        /// account screen reads these four, and only SaveCustomerAccount
+        /// writes them - SaveCustomer, which the older edit dialog calls,
+        /// leaves them alone rather than blanking them.
+        /// </summary>
+        private const string CustomerAccountColumns =
+            CustomerColumns + ", PostalAddress, PostalSuburb, PostalState, PostalPostcode";
+
         private static Customer ReadCustomer(SqlDataReader dr)
         {
             Customer c = new Customer();
@@ -165,6 +187,16 @@ namespace WeighbridgeAdmin.Data
             c.Email = GetString(dr, "Email");
             c.CreditLimit = Convert.ToDecimal(dr["CreditLimit"]);
             c.IsActive = Convert.ToBoolean(dr["IsActive"]);
+            return c;
+        }
+
+        private static Customer ReadCustomerAccount(SqlDataReader dr)
+        {
+            Customer c = ReadCustomer(dr);
+            c.PostalAddress = GetString(dr, "PostalAddress");
+            c.PostalSuburb = GetString(dr, "PostalSuburb");
+            c.PostalState = GetString(dr, "PostalState");
+            c.PostalPostcode = GetString(dr, "PostalPostcode");
             return c;
         }
 
@@ -749,6 +781,418 @@ namespace WeighbridgeAdmin.Data
             cmd.Parameters.AddWithValue("@Total", ticket.Total);
             cmd.Parameters.AddWithValue("@Notes", ticket.Notes);
             cmd.Parameters.AddWithValue("@Status", ticket.Status);
+        }
+
+        // ------------------------------------------------------------------
+        // Users and security profiles
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// The profile name is joined on rather than looked up per row - the
+        /// sign on combo and the status bar both want it straight away.
+        /// </summary>
+        private const string UserColumns =
+            "u.UserId, u.UserName, u.FullName, u.ProfileId, u.IsActive, p.ProfileName";
+
+        private const string UserFrom =
+            " FROM dbo.Users u JOIN dbo.SecurityProfiles p ON p.ProfileId = u.ProfileId ";
+
+        private static UserAccount ReadUser(SqlDataReader dr)
+        {
+            UserAccount u = new UserAccount();
+            u.UserId = Convert.ToInt32(dr["UserId"]);
+            u.UserName = GetString(dr, "UserName");
+            u.FullName = GetString(dr, "FullName");
+            u.ProfileId = Convert.ToInt32(dr["ProfileId"]);
+            u.ProfileName = GetString(dr, "ProfileName");
+            u.IsActive = Convert.ToBoolean(dr["IsActive"]);
+            return u;
+        }
+
+        /// <summary>Operators offered by the sign on dialog.</summary>
+        public List<UserAccount> GetActiveUsers()
+        {
+            List<UserAccount> results = new List<UserAccount>();
+
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT " + UserColumns + UserFrom +
+                    " WHERE u.IsActive = 1 " +
+                    " ORDER BY u.FullName", cn);
+
+                using (SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        results.Add(ReadUser(dr));
+                    }
+                }
+            }
+            return results;
+        }
+
+        public UserAccount GetUserByName(string userName)
+        {
+            if (userName == null)
+            {
+                userName = "";
+            }
+
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT " + UserColumns + UserFrom +
+                    " WHERE u.UserName = @UserName", cn);
+                cmd.Parameters.AddWithValue("@UserName", userName.Trim());
+
+                using (SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    if (dr.Read())
+                    {
+                        return ReadUser(dr);
+                    }
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// The privilege names granted to a profile.  A privilege the profile
+        /// does not hold simply has no row, so this is the whole grant list.
+        /// </summary>
+        public List<string> GetProfilePrivileges(int profileId)
+        {
+            List<string> results = new List<string>();
+
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT PrivilegeName FROM dbo.SecurityProfilePrivileges " +
+                    " WHERE ProfileId = @ProfileId " +
+                    " ORDER BY PrivilegeName", cn);
+                cmd.Parameters.AddWithValue("@ProfileId", profileId);
+
+                using (SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        results.Add(GetString(dr, "PrivilegeName"));
+                    }
+                }
+            }
+            return results;
+        }
+
+        // ------------------------------------------------------------------
+        // Customer account - header, contacts and contract rates
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// The customer with the postal address as well, for the account
+        /// screen.  GetCustomerById deliberately still returns the short shape
+        /// so nothing else has to change.
+        /// </summary>
+        public Customer GetCustomerAccount(int id)
+        {
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT " + CustomerAccountColumns + " FROM dbo.Customers WHERE Id = @Id", cn);
+                cmd.Parameters.AddWithValue("@Id", id);
+
+                using (SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    if (dr.Read())
+                    {
+                        return ReadCustomerAccount(dr);
+                    }
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Writes the header half of the account screen.  Update only - the
+        /// account screen never creates a customer, that is still the job of
+        /// the edit dialog.
+        /// </summary>
+        public void SaveCustomerAccount(Customer customer)
+        {
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "UPDATE dbo.Customers SET " +
+                    "  Name = @Name, ABN = @ABN, Address = @Address, " +
+                    "  Suburb = @Suburb, State = @State, Postcode = @Postcode, " +
+                    "  Phone = @Phone, Email = @Email, CreditLimit = @CreditLimit, " +
+                    "  IsActive = @IsActive, " +
+                    "  PostalAddress = @PostalAddress, PostalSuburb = @PostalSuburb, " +
+                    "  PostalState = @PostalState, PostalPostcode = @PostalPostcode " +
+                    " WHERE Id = @Id", cn);
+
+                cmd.Parameters.AddWithValue("@Id", customer.Id);
+                cmd.Parameters.AddWithValue("@Name", customer.Name);
+                cmd.Parameters.AddWithValue("@ABN", customer.ABN);
+                cmd.Parameters.AddWithValue("@Address", customer.Address);
+                cmd.Parameters.AddWithValue("@Suburb", customer.Suburb);
+                cmd.Parameters.AddWithValue("@State", customer.State);
+                cmd.Parameters.AddWithValue("@Postcode", customer.Postcode);
+                cmd.Parameters.AddWithValue("@Phone", customer.Phone);
+                cmd.Parameters.AddWithValue("@Email", customer.Email);
+                cmd.Parameters.AddWithValue("@CreditLimit", customer.CreditLimit);
+                cmd.Parameters.AddWithValue("@IsActive", customer.IsActive);
+                cmd.Parameters.AddWithValue("@PostalAddress", customer.PostalAddress);
+                cmd.Parameters.AddWithValue("@PostalSuburb", customer.PostalSuburb);
+                cmd.Parameters.AddWithValue("@PostalState", customer.PostalState);
+                cmd.Parameters.AddWithValue("@PostalPostcode", customer.PostalPostcode);
+
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // ---------------------------- contacts ----------------------------
+
+        private const string ContactColumns =
+            "ContactId, CustomerId, ContactName, Position, Phone, Email, IsPrimary";
+
+        private static CustomerContact ReadContact(SqlDataReader dr)
+        {
+            CustomerContact c = new CustomerContact();
+            c.ContactId = Convert.ToInt32(dr["ContactId"]);
+            c.CustomerId = Convert.ToInt32(dr["CustomerId"]);
+            c.ContactName = GetString(dr, "ContactName");
+            c.Position = GetString(dr, "Position");
+            c.Phone = GetString(dr, "Phone");
+            c.Email = GetString(dr, "Email");
+            c.IsPrimary = Convert.ToBoolean(dr["IsPrimary"]);
+            return c;
+        }
+
+        public List<CustomerContact> GetCustomerContacts(int customerId)
+        {
+            List<CustomerContact> results = new List<CustomerContact>();
+
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT " + ContactColumns + " FROM dbo.CustomerContacts " +
+                    " WHERE CustomerId = @CustomerId " +
+                    " ORDER BY IsPrimary DESC, ContactName", cn);
+                cmd.Parameters.AddWithValue("@CustomerId", customerId);
+
+                using (SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        results.Add(ReadContact(dr));
+                    }
+                }
+            }
+            return results;
+        }
+
+        public void SaveContact(CustomerContact contact)
+        {
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd;
+
+                if (contact.ContactId == 0)
+                {
+                    cmd = new SqlCommand(
+                        "INSERT INTO dbo.CustomerContacts " +
+                        " (CustomerId, ContactName, Position, Phone, Email, IsPrimary) " +
+                        " VALUES " +
+                        " (@CustomerId, @ContactName, @Position, @Phone, @Email, @IsPrimary); " +
+                        "SELECT CAST(SCOPE_IDENTITY() AS INT);", cn);
+                }
+                else
+                {
+                    cmd = new SqlCommand(
+                        "UPDATE dbo.CustomerContacts SET " +
+                        "  ContactName = @ContactName, Position = @Position, " +
+                        "  Phone = @Phone, Email = @Email, IsPrimary = @IsPrimary " +
+                        " WHERE ContactId = @ContactId", cn);
+                    cmd.Parameters.AddWithValue("@ContactId", contact.ContactId);
+                }
+
+                cmd.Parameters.AddWithValue("@CustomerId", contact.CustomerId);
+                cmd.Parameters.AddWithValue("@ContactName", contact.ContactName);
+                cmd.Parameters.AddWithValue("@Position", contact.Position);
+                cmd.Parameters.AddWithValue("@Phone", contact.Phone);
+                cmd.Parameters.AddWithValue("@Email", contact.Email);
+                cmd.Parameters.AddWithValue("@IsPrimary", contact.IsPrimary);
+
+                if (contact.ContactId == 0)
+                {
+                    contact.ContactId = Convert.ToInt32(cmd.ExecuteScalar());
+                }
+                else
+                {
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        public void DeleteContact(int contactId)
+        {
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "DELETE FROM dbo.CustomerContacts WHERE ContactId = @ContactId", cn);
+                cmd.Parameters.AddWithValue("@ContactId", contactId);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // -------------------------- contract rates -------------------------
+
+        /// <summary>
+        /// Rates with the product code and name joined on, so the rates grid
+        /// fills from one query rather than one per row.
+        /// </summary>
+        private const string RateSql =
+            "SELECT r.RateId, r.CustomerId, r.ProductId, " +
+            "       p.Code AS ProductCode, p.Name AS ProductName, " +
+            "       r.RatePerTonne, r.EffectiveFrom, r.EffectiveTo, r.Notes " +
+            "  FROM dbo.ContractRates r " +
+            "  JOIN dbo.Products p ON p.Id = r.ProductId ";
+
+        private static ContractRate ReadRate(SqlDataReader dr)
+        {
+            ContractRate r = new ContractRate();
+            r.RateId = Convert.ToInt32(dr["RateId"]);
+            r.CustomerId = Convert.ToInt32(dr["CustomerId"]);
+            r.ProductId = Convert.ToInt32(dr["ProductId"]);
+            r.ProductCode = GetString(dr, "ProductCode");
+            r.ProductName = GetString(dr, "ProductName");
+            r.RatePerTonne = Convert.ToDecimal(dr["RatePerTonne"]);
+            r.EffectiveFrom = Convert.ToDateTime(dr["EffectiveFrom"]);
+            if (dr["EffectiveTo"] == DBNull.Value)
+            {
+                r.EffectiveTo = null;
+            }
+            else
+            {
+                r.EffectiveTo = Convert.ToDateTime(dr["EffectiveTo"]);
+            }
+            r.Notes = GetString(dr, "Notes");
+            return r;
+        }
+
+        public List<ContractRate> GetContractRates(int customerId)
+        {
+            List<ContractRate> results = new List<ContractRate>();
+
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    RateSql +
+                    " WHERE r.CustomerId = @CustomerId " +
+                    " ORDER BY p.Code, r.EffectiveFrom DESC", cn);
+                cmd.Parameters.AddWithValue("@CustomerId", customerId);
+
+                using (SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        results.Add(ReadRate(dr));
+                    }
+                }
+            }
+            return results;
+        }
+
+        public void SaveContractRate(ContractRate rate)
+        {
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd;
+
+                if (rate.RateId == 0)
+                {
+                    cmd = new SqlCommand(
+                        "INSERT INTO dbo.ContractRates " +
+                        " (CustomerId, ProductId, RatePerTonne, EffectiveFrom, EffectiveTo, Notes) " +
+                        " VALUES " +
+                        " (@CustomerId, @ProductId, @RatePerTonne, @EffectiveFrom, @EffectiveTo, @Notes); " +
+                        "SELECT CAST(SCOPE_IDENTITY() AS INT);", cn);
+                }
+                else
+                {
+                    cmd = new SqlCommand(
+                        "UPDATE dbo.ContractRates SET " +
+                        "  ProductId = @ProductId, RatePerTonne = @RatePerTonne, " +
+                        "  EffectiveFrom = @EffectiveFrom, EffectiveTo = @EffectiveTo, " +
+                        "  Notes = @Notes " +
+                        " WHERE RateId = @RateId", cn);
+                    cmd.Parameters.AddWithValue("@RateId", rate.RateId);
+                }
+
+                cmd.Parameters.AddWithValue("@CustomerId", rate.CustomerId);
+                cmd.Parameters.AddWithValue("@ProductId", rate.ProductId);
+                cmd.Parameters.AddWithValue("@RatePerTonne", rate.RatePerTonne);
+                cmd.Parameters.AddWithValue("@EffectiveFrom", rate.EffectiveFrom);
+
+                if (rate.EffectiveTo.HasValue)
+                {
+                    cmd.Parameters.AddWithValue("@EffectiveTo", rate.EffectiveTo.Value);
+                }
+                else
+                {
+                    cmd.Parameters.AddWithValue("@EffectiveTo", DBNull.Value);
+                }
+
+                cmd.Parameters.AddWithValue("@Notes", rate.Notes);
+
+                if (rate.RateId == 0)
+                {
+                    rate.RateId = Convert.ToInt32(cmd.ExecuteScalar());
+                }
+                else
+                {
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        public void DeleteContractRate(int rateId)
+        {
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "DELETE FROM dbo.ContractRates WHERE RateId = @RateId", cn);
+                cmd.Parameters.AddWithValue("@RateId", rateId);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        /// <summary>
+        /// The vehicles on a customer's account, for the account screen's
+        /// third tab.  SearchVehicles cannot do this - it filters on text.
+        /// </summary>
+        public List<Vehicle> GetVehiclesByCustomer(int customerId)
+        {
+            List<Vehicle> results = new List<Vehicle>();
+
+            using (SqlConnection cn = OpenConnection())
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT " + VehicleColumns + " FROM dbo.Vehicles " +
+                    " WHERE CustomerId = @CustomerId " +
+                    " ORDER BY Registration", cn);
+                cmd.Parameters.AddWithValue("@CustomerId", customerId);
+
+                using (SqlDataReader dr = cmd.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        results.Add(ReadVehicle(dr));
+                    }
+                }
+            }
+            return results;
         }
     }
 }
