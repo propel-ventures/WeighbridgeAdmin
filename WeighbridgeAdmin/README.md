@@ -21,6 +21,7 @@ through plain ADO.NET.
 | .NET Framework 4.8 runtime | Needed to **run** the exe. Ships with Windows 10 1903+ / Windows 11 |
 | SQL Server | The shipped `app.config` points at a local **SQL Server Express** instance (`localhost\SQLEXPRESS`). LocalDB works just as well — see the alternative below |
 | `sqlcmd` or SQL Server Management Studio (SSMS) | To run the create script |
+| DevExpress WinForms 26.1 | The two list screens and the customer account screen use `GridControl`. `DevExpress.Win.Grid` 26.1.4 restores straight from **nuget.org** — no DevExpress install, feed or account is needed to build. See the licence note under *Build and run* |
 
 Open `WeighbridgeAdmin.sln` in the repository root, or the `WeighbridgeAdmin.csproj` in this folder — both work.
 
@@ -148,6 +149,15 @@ Release build:
 dotnet build WeighbridgeAdmin.csproj -c Release
 ```
 
+> **`warning DX1000` whenever the project actually compiles** means DevExpress is running on an
+> evaluation licence rather than a registered one. The build still succeeds and the app still runs;
+> it shows a trial notice and must not be redistributed until a licence is registered.
+>
+> Licensing is **per developer machine**, not per repository. DevExpress reads it from
+> `%AppData%\DevExpress\DevExpress_License.txt`, written when you register a licence with a
+> DevExpress account. Cloning and building this repo needs neither that file nor an account — a
+> colleague without one builds under the same evaluation terms and sees the same warning.
+
 ### If it does not start
 
 A dialog reading *"The configuration file is not valid"* means a setting could not be read — most
@@ -256,11 +266,29 @@ The screen is read-only by design — a saved ticket is an accounting document, 
 or delete. Correcting one means voiding it and re-weighing, which is what the demo data shows
 (`WB100006` voided, reweighed as `WB100007`).
 
+Both list screens are DevExpress `GridControl`s, so on top of the filters above there is a filter
+row under the column headers, every column carries its own header filter and sort, the group panel
+across the top groups by any column you drag into it, and right-clicking a header offers the column
+chooser. None of that is wired to the repository — it all runs against the rows already fetched.
+
+The cells themselves stay read-only: every `GridColumn` sets `OptionsColumn.AllowEdit = false` and
+`OptionsColumn.ReadOnly = true`, and the views set `OptionsBehavior.ReadOnly`. The view-wide
+`OptionsBehavior.Editable = false` would be the shorter way to say it, but it also hides the filter
+row, which is why the read-only flags sit on the columns instead.
+
+The look comes from the **WXI** skin, selected in `Program.cs`. DevExpress otherwise starts on its
+`Basic` skin, which is deliberately plain and looks almost exactly like the `DataGridView` it
+replaced — change that one string to try another (`The Bezier`, `Office 2019 Colorful`,
+`Visual Studio 2013 Blue`, and about twenty more).
+
 ### Customer list
 
 `F5` refresh, `F2` edit, `Insert` new, double-click a row to edit. The search box filters on every
 keystroke against code and name. Deleting a customer is blocked if any vehicle or weigh ticket
 still references it — mark it inactive instead.
+
+The same grid features apply here: header filters, sorting, and grouping by dragging a column
+header onto the group panel.
 
 New and Edit need `CUSTOMER_EDIT`; Delete needs `CUSTOMER_DELETE`, which only the Administrator
 profile holds. The shortcut keys go through the same handlers as the buttons, so `F2` on a greyed
@@ -286,6 +314,12 @@ trading one. Under it are three tabs:
   told as soon as you leave the row if they do. The rate in force today is shown in black and
   expired ones in grey, with a totals line underneath.
 - **Vehicles** — read only. Vehicles belong to the vehicle master, not to the account.
+
+All three tabs are DevExpress `GridControl`s on the same WXI skin as the list screens, bound
+straight to the working lists of contacts, rates and vehicles. The two editable grids show a new
+item row at the bottom, and a refused value keeps its cell open with an error icon until it is
+fixed or `Esc` undoes it. They have no filter row or group panel, because the search box above
+each grid already does that job.
 
 Everything on the screen saves together with one **Save**, which stays greyed until something
 actually changes. Closing with unsaved changes prompts to save, discard or stay.
@@ -331,13 +365,13 @@ Data/
 Forms/
   LoginForm.*                Sign-on dialog: operator dropdown, Sign In / Exit
   BaseEntryForm.*            Base class, not a screen: header, Save/Close, dirty flag
-  CustomerAccountForm.*      Inherits BaseEntryForm; header panel + 3 tabs, 2 editable grids
+  CustomerAccountForm.*      Inherits BaseEntryForm; header panel + 3 tabs, 2 editable grids (DevExpress GridControl)
   MainForm.*                 MDI parent: menu, status bar, clock timer
-  CustomerListForm.*         Customer browse grid + toolbar + search
+  CustomerListForm.*         Customer browse grid (DevExpress GridControl) + toolbar + search
   CustomerEditForm.*         Add/edit customer dialog with ErrorProvider validation
   VehicleLookupDialog.*      The "F4 lookup" dialog
   WeighTicketForm.*          Four-tab weigh ticket wizard
-  TicketListForm.*           Read-only ticket browse grid with filters and totals
+  TicketListForm.*           Read-only ticket browse grid (DevExpress GridControl) with filters and totals
 
 Database/
   CreateDatabase.sql         Drop/create all tables + demo data (copied to output)
@@ -405,8 +439,9 @@ These are deliberate characteristics of the code, worth knowing before you chang
   mention the four postal-address columns, so it cannot blank them; `SaveCustomerAccount` (the
   account screen) writes all of them. Adding the postal address to the older statement would
   look tidier and would quietly wipe data.
-- **The editable grids hold the model on `DataGridViewRow.Tag`** and write it back cell by cell
-  in `CellEndEdit`, so the working list stays correct even when the search box refills the grid.
+- **The editable grids are bound straight to the working lists** (`BindingList<CustomerContact>`
+  and `BindingList<ContractRate>`), so a posted cell is already on the model object. The search
+  boxes filter the views through `CustomRowFilter` and never touch the lists.
   Deleted rows exist only as two `List<int>` fields of ids until Save runs. There is no
   transaction around the save: header, contacts and rates each go through their own connection,
   exactly like the rest of the application.

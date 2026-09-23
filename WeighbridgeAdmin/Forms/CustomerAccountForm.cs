@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Globalization;
 using System.Windows.Forms;
+using DevExpress.XtraEditors.Controls;
+using DevExpress.XtraGrid.Columns;
+using DevExpress.XtraGrid.Views.Base;
+using DevExpress.XtraGrid.Views.Grid;
 using WeighbridgeAdmin.Data;
 using WeighbridgeAdmin.Model;
 using WeighbridgeAdmin.Security;
@@ -17,11 +22,11 @@ namespace WeighbridgeAdmin.Forms
     /// dirty flag and the prompt on the way out are not in this file or in
     /// this screen's designer file.  Set CustomerId before calling Show.
     ///
-    /// Like the weigh ticket screen, nothing here holds a tidy edited model
-    /// while the operator types: the contact and rate objects hang off
-    /// DataGridViewRow.Tag and are written back cell by cell in CellEndEdit.
-    /// The two lists of deleted ids are the only record that a row ever
-    /// existed, and they are what makes Save able to remove anything.
+    /// The three grids are DevExpress GridControls bound straight to the
+    /// working lists, so an edit in a cell lands on the contact or rate object
+    /// as soon as the cell is posted - there is no copy-back step.  The two
+    /// lists of deleted ids are the only record that a row ever existed, and
+    /// they are what makes Save able to remove anything.
     /// </summary>
     public partial class CustomerAccountForm : BaseEntryForm
     {
@@ -30,9 +35,10 @@ namespace WeighbridgeAdmin.Forms
 
         // The working set.  Loaded once, edited in the grids, written on Save.
         // Re-reading these from the database on every keystroke in the search
-        // box would throw away whatever had not been saved yet.
-        private List<CustomerContact> _contacts = new List<CustomerContact>();
-        private List<ContractRate> _rates = new List<ContractRate>();
+        // box would throw away whatever had not been saved yet.  The search
+        // boxes filter the views, not these lists.
+        private BindingList<CustomerContact> _contacts = new BindingList<CustomerContact>();
+        private BindingList<ContractRate> _rates = new BindingList<ContractRate>();
 
         // Rows the operator has deleted.  Nothing else remembers them.
         private List<int> _deletedContactIds = new List<int>();
@@ -41,6 +47,10 @@ namespace WeighbridgeAdmin.Forms
         // Held up while the grids are being filled, so the cell handlers do
         // not mark the form dirty before the operator has touched anything.
         private bool _loading = false;
+
+        // Made once from the grid's own font the first time a primary contact
+        // is painted, rather than a new Font on every paint.
+        private Font _primaryFont;
 
         public CustomerAccountForm()
         {
@@ -80,18 +90,16 @@ namespace WeighbridgeAdmin.Forms
 
             this.ucHeader.LoadFrom(_customer);
 
-            // The rates grid picks its product out of a combo column.  The
-            // items are the Product objects themselves, so the cell value is
-            // the master record rather than a code that has to be looked up.
+            // The rates grid picks its product from a lookup over the product
+            // master.  The cell holds the ProductId; the lookup shows the name.
             _products = Repository.Current.GetProducts();
-            this.colRateProduct.Items.Clear();
-            for (int i = 0; i < _products.Count; i++)
-            {
-                this.colRateProduct.Items.Add(_products[i]);
-            }
+            this.riRateProduct.DataSource = _products;
 
-            _contacts = Repository.Current.GetCustomerContacts(_customer.Id);
-            _rates = Repository.Current.GetContractRates(_customer.Id);
+            _contacts = new BindingList<CustomerContact>(Repository.Current.GetCustomerContacts(_customer.Id));
+            _rates = new BindingList<ContractRate>(Repository.Current.GetContractRates(_customer.Id));
+
+            this.grdContacts.DataSource = _contacts;
+            this.grdRates.DataSource = _rates;
 
             ApplyPrivileges();
 
@@ -117,18 +125,18 @@ namespace WeighbridgeAdmin.Forms
 
             this.ucHeader.ReadOnlyHeader = !canEdit;
 
-            this.grdContacts.ReadOnly = !canEdit;
-            this.grdContacts.AllowUserToAddRows = canEdit;
-            this.grdContacts.AllowUserToDeleteRows = canEdit;
+            this.gvContacts.OptionsBehavior.Editable = canEdit;
+            this.gvContacts.OptionsView.NewItemRowPosition = canEdit ? NewItemRowPosition.Bottom : NewItemRowPosition.None;
 
             // Rates are a pricing decision, not customer maintenance.
-            this.grdRates.ReadOnly = !canPrice;
-            this.grdRates.AllowUserToAddRows = canPrice;
-            this.grdRates.AllowUserToDeleteRows = canPrice;
+            this.gvRates.OptionsBehavior.Editable = canPrice;
+            this.gvRates.OptionsView.NewItemRowPosition = canPrice ? NewItemRowPosition.Bottom : NewItemRowPosition.None;
 
             if (!canPrice)
             {
-                this.grdRates.DefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
+                this.gvRates.OptionsView.EnableAppearanceEvenRow = false;
+                this.gvRates.Appearance.Row.BackColor = Color.FromArgb(240, 240, 240);
+                this.gvRates.Appearance.Row.Options.UseBackColor = true;
                 this.tabRates.Text = "Contract &Rates (read only)";
             }
         }
@@ -138,67 +146,28 @@ namespace WeighbridgeAdmin.Forms
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Paints the working list onto the grid, applying whatever is in the
-        /// search box.  The contact object is parked on the row Tag so the
-        /// cell handlers can write straight back onto it.
+        /// Re-applies the search box to the grid.  The grid is bound to the
+        /// working list, so this only re-runs the filter and repaints.
         /// </summary>
         private void FillContactGrid()
         {
-            bool wasLoading = _loading;
-            _loading = true;
-
-            this.grdContacts.Rows.Clear();
-
-            string filter = this.ucContactSearch.SearchText.ToUpper();
-            int shown = 0;
-
-            for (int i = 0; i < _contacts.Count; i++)
-            {
-                CustomerContact c = _contacts[i];
-
-                if (filter.Length > 0
-                    && c.ContactName.ToUpper().IndexOf(filter) < 0
-                    && c.Position.ToUpper().IndexOf(filter) < 0
-                    && c.Email.ToUpper().IndexOf(filter) < 0)
-                {
-                    continue;
-                }
-
-                int index = this.grdContacts.Rows.Add();
-                DataGridViewRow row = this.grdContacts.Rows[index];
-
-                row.Cells[this.colContactName.Index].Value = c.ContactName;
-                row.Cells[this.colPosition.Index].Value = PositionOrBlank(c.Position);
-                row.Cells[this.colContactPhone.Index].Value = c.Phone;
-                row.Cells[this.colContactEmail.Index].Value = c.Email;
-                row.Cells[this.colIsPrimary.Index].Value = c.IsPrimary;
-                row.Tag = c;
-
-                if (c.IsPrimary)
-                {
-                    row.DefaultCellStyle.Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Bold);
-                }
-
-                shown++;
-            }
-
-            this.ucContactSearch.ResultCount = shown;
-
-            _loading = wasLoading;
+            this.gvContacts.RefreshData();
+            this.ucContactSearch.ResultCount = this.gvContacts.DataRowCount;
         }
 
-        /// <summary>
-        /// The combo column only accepts the positions it was given in the
-        /// designer.  Anything else in the database - and there is nothing
-        /// stopping it - comes back blank rather than raising a data error.
-        /// </summary>
-        private string PositionOrBlank(string position)
+        private void gvContacts_CustomRowFilter(object sender, RowFilterEventArgs e)
         {
-            if (this.colPosition.Items.Contains(position))
+            string filter = this.ucContactSearch.SearchText.ToUpper();
+            if (filter.Length == 0 || e.ListSourceRow < 0 || e.ListSourceRow >= _contacts.Count)
             {
-                return position;
+                return;
             }
-            return "";
+
+            CustomerContact c = _contacts[e.ListSourceRow];
+            e.Visible = c.ContactName.ToUpper().IndexOf(filter) >= 0
+                || c.Position.ToUpper().IndexOf(filter) >= 0
+                || c.Email.ToUpper().IndexOf(filter) >= 0;
+            e.Handled = true;
         }
 
         private void ucContactSearch_SearchChanged(object sender, EventArgs e)
@@ -206,107 +175,81 @@ namespace WeighbridgeAdmin.Forms
             FillContactGrid();
         }
 
+        private void gvContacts_RowStyle(object sender, RowStyleEventArgs e)
+        {
+            CustomerContact c = this.gvContacts.GetRow(e.RowHandle) as CustomerContact;
+            if (c == null || !c.IsPrimary)
+            {
+                return;
+            }
+
+            if (_primaryFont == null)
+            {
+                _primaryFont = new Font(e.Appearance.Font, FontStyle.Bold);
+            }
+            e.Appearance.Font = _primaryFont;
+        }
+
         /// <summary>
         /// Fired as soon as the operator starts typing in the new bottom row.
-        /// The contact object is created here and pushed into the working list
-        /// straight away, so every later handler can assume row.Tag is there.
+        /// The binding list has already made the contact object; this only
+        /// ties it to the account.
         /// </summary>
-        private void grdContacts_DefaultValuesNeeded(object sender, DataGridViewRowEventArgs e)
+        private void gvContacts_InitNewRow(object sender, InitNewRowEventArgs e)
         {
-            CustomerContact fresh = new CustomerContact();
+            CustomerContact fresh = this.gvContacts.GetRow(e.RowHandle) as CustomerContact;
+            if (fresh == null)
+            {
+                return;
+            }
             fresh.CustomerId = this.CustomerId;
-
-            e.Row.Cells[this.colIsPrimary.Index].Value = false;
-            e.Row.Tag = fresh;
-
-            _contacts.Add(fresh);
+            fresh.IsPrimary = false;
         }
 
         /// <summary>
-        /// A check box in a grid does not commit until the cell loses focus,
+        /// A check box in a grid does not post until the cell loses focus,
         /// so the primary-contact rule would not fire until the operator
-        /// clicked somewhere else.  Committing here is the usual way round it.
+        /// clicked somewhere else.  Posting here is the usual way round it.
         /// </summary>
-        private void grdContacts_CurrentCellDirtyStateChanged(object sender, EventArgs e)
+        private void riIsPrimary_EditValueChanged(object sender, EventArgs e)
         {
-            if (this.grdContacts.IsCurrentCellDirty
-                && this.grdContacts.CurrentCell != null
-                && this.grdContacts.CurrentCell.ColumnIndex == this.colIsPrimary.Index)
-            {
-                this.grdContacts.CommitEdit(DataGridViewDataErrorContexts.Commit);
-            }
+            this.gvContacts.PostEditor();
         }
 
-        private void grdContacts_CellValidating(object sender, DataGridViewCellValidatingEventArgs e)
+        private void gvContacts_ValidatingEditor(object sender, BaseContainerValidateEditorEventArgs e)
         {
-            if (_loading || e.RowIndex < 0)
+            if (_loading)
             {
                 return;
             }
 
-            DataGridViewRow row = this.grdContacts.Rows[e.RowIndex];
-            if (row.IsNewRow)
+            GridColumn column = this.gvContacts.FocusedColumn;
+            if (column != this.colContactName && column != this.colContactPhone && column != this.colContactEmail)
             {
                 return;
             }
 
-            string value = Convert.ToString(e.FormattedValue).Trim();
+            string value = Convert.ToString(e.Value).Trim();
+            e.Value = value;
 
-            if (e.ColumnIndex == this.colContactName.Index && value.Length == 0)
+            if (column == this.colContactName && value.Length == 0)
             {
-                row.ErrorText = "A contact must have a name.";
-                e.Cancel = true;
+                e.ErrorText = "A contact must have a name.";
+                e.Valid = false;
                 return;
             }
 
-            if (e.ColumnIndex == this.colContactEmail.Index && value.Length > 0)
+            if (column == this.colContactEmail && value.Length > 0)
             {
                 int at = value.IndexOf('@');
                 int dot = value.LastIndexOf('.');
                 if (at < 1 || dot < at + 2 || dot >= value.Length - 1 || value.IndexOf(' ') >= 0)
                 {
-                    row.ErrorText = "Email address is not in a valid format.";
-                    e.Cancel = true;
+                    e.ErrorText = "Email address is not in a valid format.";
+                    e.Valid = false;
                     return;
                 }
             }
-
-            row.ErrorText = "";
-        }
-
-        private void grdContacts_CellEndEdit(object sender, DataGridViewCellEventArgs e)
-        {
-            if (_loading || e.RowIndex < 0)
-            {
-                return;
-            }
-
-            this.grdContacts.Rows[e.RowIndex].ErrorText = "";
-            ApplyContactRow(e.RowIndex);
-            MarkDirty();
-        }
-
-        /// <summary>
-        /// Writes one grid row back onto the contact object hanging off it.
-        /// Called from CellEndEdit rather than on save, so the working list is
-        /// always up to date even when the search box refills the grid.
-        /// </summary>
-        private void ApplyContactRow(int rowIndex)
-        {
-            DataGridViewRow row = this.grdContacts.Rows[rowIndex];
-            CustomerContact c = row.Tag as CustomerContact;
-            if (c == null)
-            {
-                return;
-            }
-
-            c.ContactName = Convert.ToString(row.Cells[this.colContactName.Index].Value).Trim();
-            c.Position = Convert.ToString(row.Cells[this.colPosition.Index].Value).Trim();
-            c.Phone = Convert.ToString(row.Cells[this.colContactPhone.Index].Value).Trim();
-            c.Email = Convert.ToString(row.Cells[this.colContactEmail.Index].Value).Trim();
-
-            object primary = row.Cells[this.colIsPrimary.Index].Value;
-            c.IsPrimary = (primary != null && Convert.ToBoolean(primary));
         }
 
         /// <summary>
@@ -314,22 +257,16 @@ namespace WeighbridgeAdmin.Forms
         /// rest.  A cross-row rule living in a cell handler, which is exactly
         /// how the old system did it.
         /// </summary>
-        private void grdContacts_CellValueChanged(object sender, DataGridViewCellEventArgs e)
+        private void gvContacts_CellValueChanged(object sender, CellValueChangedEventArgs e)
         {
-            if (_loading || e.RowIndex < 0 || e.ColumnIndex != this.colIsPrimary.Index)
+            if (_loading)
             {
                 return;
             }
 
-            DataGridViewRow changed = this.grdContacts.Rows[e.RowIndex];
-            object value = changed.Cells[this.colIsPrimary.Index].Value;
-            bool isPrimary = (value != null && Convert.ToBoolean(value));
-
-            ApplyContactRow(e.RowIndex);
-
-            if (isPrimary)
+            if (e.Column == this.colIsPrimary && e.Value != null && Convert.ToBoolean(e.Value))
             {
-                CustomerContact justSet = changed.Tag as CustomerContact;
+                CustomerContact justSet = this.gvContacts.GetRow(e.RowHandle) as CustomerContact;
 
                 for (int i = 0; i < _contacts.Count; i++)
                 {
@@ -339,37 +276,42 @@ namespace WeighbridgeAdmin.Forms
                     }
                 }
 
-                // Push the change back onto every other row on screen.
-                _loading = true;
-                for (int i = 0; i < this.grdContacts.Rows.Count; i++)
-                {
-                    DataGridViewRow row = this.grdContacts.Rows[i];
-                    if (row.IsNewRow || i == e.RowIndex)
-                    {
-                        continue;
-                    }
-                    row.Cells[this.colIsPrimary.Index].Value = false;
-                }
-                _loading = false;
+                // The objects changed underneath the grid; repaint so the
+                // other rows lose their tick and their bold.
+                this.gvContacts.LayoutChanged();
             }
 
             MarkDirty();
         }
 
-        private void grdContacts_UserDeletingRow(object sender, DataGridViewRowCancelEventArgs e)
+        private void grdContacts_KeyDown(object sender, KeyEventArgs e)
         {
-            CustomerContact c = e.Row.Tag as CustomerContact;
+            if (e.KeyCode != Keys.Delete
+                || !this.gvContacts.OptionsBehavior.Editable
+                || this.gvContacts.ActiveEditor != null)
+            {
+                return;
+            }
+
+            int handle = this.gvContacts.FocusedRowHandle;
+            if (this.gvContacts.IsNewItemRow(handle) || !this.gvContacts.IsDataRow(handle))
+            {
+                return;
+            }
+
+            CustomerContact c = this.gvContacts.GetRow(handle) as CustomerContact;
             if (c == null)
             {
                 return;
             }
+
+            e.Handled = true;
 
             if (MessageBox.Show(this,
                 "Remove contact " + c.ContactName + " from this account?",
                 "Delete Contact", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             {
-                e.Cancel = true;
                 return;
             }
 
@@ -379,9 +321,9 @@ namespace WeighbridgeAdmin.Forms
             {
                 _deletedContactIds.Add(c.ContactId);
             }
-            _contacts.Remove(c);
+            this.gvContacts.DeleteRow(handle);
 
-            this.ucContactSearch.ResultCount = this.grdContacts.Rows.Count - 2;
+            this.ucContactSearch.ResultCount = this.gvContacts.DataRowCount;
             MarkDirty();
         }
 
@@ -391,57 +333,42 @@ namespace WeighbridgeAdmin.Forms
 
         private void FillRateGrid()
         {
-            bool wasLoading = _loading;
-            _loading = true;
-
-            this.grdRates.Rows.Clear();
-
-            string filter = this.ucRateSearch.SearchText.ToUpper();
-            int shown = 0;
-
-            for (int i = 0; i < _rates.Count; i++)
-            {
-                ContractRate r = _rates[i];
-                Product p = FindProduct(r.ProductId);
-
-                if (filter.Length > 0)
-                {
-                    string haystack = (r.ProductCode + " " + r.ProductName + " " + r.Notes).ToUpper();
-                    if (haystack.IndexOf(filter) < 0)
-                    {
-                        continue;
-                    }
-                }
-
-                int index = this.grdRates.Rows.Add();
-                DataGridViewRow row = this.grdRates.Rows[index];
-
-                row.Cells[this.colRateProduct.Index].Value = p;
-                row.Cells[this.colRate.Index].Value = r.RatePerTonne.ToString("N2");
-                row.Cells[this.colEffectiveFrom.Index].Value = r.EffectiveFrom.ToString("dd/MM/yyyy");
-                row.Cells[this.colEffectiveTo.Index].Value = FormatOptionalDate(r.EffectiveTo);
-                row.Cells[this.colRateNotes.Index].Value = r.Notes;
-                row.Tag = r;
-
-                // The rate in force today stands out; one whose window has
-                // closed is greyed the way the ticket list greys voided rows.
-                if (r.IsInForceOn(DateTime.Today))
-                {
-                    row.DefaultCellStyle.ForeColor = Color.Black;
-                }
-                else
-                {
-                    row.DefaultCellStyle.ForeColor = Color.Gray;
-                }
-
-                shown++;
-            }
-
-            this.ucRateSearch.ResultCount = shown;
-
-            _loading = wasLoading;
+            this.gvRates.RefreshData();
+            this.ucRateSearch.ResultCount = this.gvRates.DataRowCount;
 
             RecalculateRateTotals();
+        }
+
+        private void gvRates_CustomRowFilter(object sender, RowFilterEventArgs e)
+        {
+            string filter = this.ucRateSearch.SearchText.ToUpper();
+            if (filter.Length == 0 || e.ListSourceRow < 0 || e.ListSourceRow >= _rates.Count)
+            {
+                return;
+            }
+
+            ContractRate r = _rates[e.ListSourceRow];
+            string haystack = (r.ProductCode + " " + r.ProductName + " " + r.Notes).ToUpper();
+            e.Visible = haystack.IndexOf(filter) >= 0;
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// The rate in force today stands out; one whose window has closed is
+        /// greyed the way the ticket list greys voided rows.
+        /// </summary>
+        private void gvRates_RowStyle(object sender, RowStyleEventArgs e)
+        {
+            ContractRate r = this.gvRates.GetRow(e.RowHandle) as ContractRate;
+            if (r == null || this.gvRates.IsNewItemRow(e.RowHandle))
+            {
+                return;
+            }
+
+            if (!r.IsInForceOn(DateTime.Today))
+            {
+                e.Appearance.ForeColor = Color.Gray;
+            }
         }
 
         private Product FindProduct(int productId)
@@ -454,15 +381,6 @@ namespace WeighbridgeAdmin.Forms
                 }
             }
             return null;
-        }
-
-        private static string FormatOptionalDate(DateTime? value)
-        {
-            if (!value.HasValue)
-            {
-                return "";
-            }
-            return value.Value.ToString("dd/MM/yyyy");
         }
 
         /// <summary>
@@ -492,52 +410,28 @@ namespace WeighbridgeAdmin.Forms
             FillRateGrid();
         }
 
-        private void grdRates_DefaultValuesNeeded(object sender, DataGridViewRowEventArgs e)
+        private void gvRates_InitNewRow(object sender, InitNewRowEventArgs e)
         {
-            ContractRate fresh = new ContractRate();
-            fresh.CustomerId = this.CustomerId;
-            fresh.EffectiveFrom = DateTime.Today;
-
-            e.Row.Cells[this.colRate.Index].Value = "0.00";
-            e.Row.Cells[this.colEffectiveFrom.Index].Value = DateTime.Today.ToString("dd/MM/yyyy");
-            e.Row.Tag = fresh;
-
-            _rates.Add(fresh);
-        }
-
-        private void grdRates_CurrentCellDirtyStateChanged(object sender, EventArgs e)
-        {
-            if (this.grdRates.IsCurrentCellDirty
-                && this.grdRates.CurrentCell != null
-                && this.grdRates.CurrentCell.ColumnIndex == this.colRateProduct.Index)
-            {
-                this.grdRates.CommitEdit(DataGridViewDataErrorContexts.Commit);
-            }
-        }
-
-        /// <summary>
-        /// Hangs a key filter on the editing box while the rate column is
-        /// being typed into, so letters never get in there in the first place.
-        /// The handler has to be taken off again or it accumulates - the same
-        /// editing control is handed out for every cell.
-        /// </summary>
-        private void grdRates_EditingControlShowing(object sender, DataGridViewEditingControlShowingEventArgs e)
-        {
-            TextBox box = e.Control as TextBox;
-            if (box == null)
+            ContractRate fresh = this.gvRates.GetRow(e.RowHandle) as ContractRate;
+            if (fresh == null)
             {
                 return;
             }
-
-            box.KeyPress -= new KeyPressEventHandler(RateBox_KeyPress);
-
-            if (this.grdRates.CurrentCell != null
-                && this.grdRates.CurrentCell.ColumnIndex == this.colRate.Index)
-            {
-                box.KeyPress += new KeyPressEventHandler(RateBox_KeyPress);
-            }
+            fresh.CustomerId = this.CustomerId;
+            fresh.EffectiveFrom = DateTime.Today;
+            fresh.RatePerTonne = 0m;
         }
 
+        private void riRateProduct_EditValueChanged(object sender, EventArgs e)
+        {
+            this.gvRates.PostEditor();
+        }
+
+        /// <summary>
+        /// Key filter on the rate editor, so letters never get in there in the
+        /// first place.  It hangs off the repository item, so every editor the
+        /// grid opens in that column gets it once - nothing to take off again.
+        /// </summary>
         private void RateBox_KeyPress(object sender, KeyPressEventArgs e)
         {
             if (char.IsControl(e.KeyChar))
@@ -550,7 +444,7 @@ namespace WeighbridgeAdmin.Forms
             }
             if (e.KeyChar == '.')
             {
-                TextBox box = sender as TextBox;
+                Control box = sender as Control;
                 if (box != null && box.Text.IndexOf('.') < 0)
                 {
                     return;
@@ -559,154 +453,153 @@ namespace WeighbridgeAdmin.Forms
             e.Handled = true;
         }
 
-        private void grdRates_CellValidating(object sender, DataGridViewCellValidatingEventArgs e)
+        /// <summary>
+        /// The editors hand over text; this checks it and swaps in the typed
+        /// value the model property wants, so the grid never has to convert.
+        /// </summary>
+        private void gvRates_ValidatingEditor(object sender, BaseContainerValidateEditorEventArgs e)
         {
-            if (_loading || e.RowIndex < 0)
+            if (_loading)
             {
                 return;
             }
 
-            DataGridViewRow row = this.grdRates.Rows[e.RowIndex];
-            if (row.IsNewRow)
-            {
-                return;
-            }
+            GridColumn column = this.gvRates.FocusedColumn;
+            ContractRate r = this.gvRates.GetFocusedRow() as ContractRate;
 
-            string value = Convert.ToString(e.FormattedValue).Trim();
-
-            if (e.ColumnIndex == this.colRate.Index)
+            if (column == this.colRate)
             {
                 decimal rate;
-                if (!decimal.TryParse(value, out rate) || rate < 0m)
+                if (!decimal.TryParse(Convert.ToString(e.Value).Trim(), out rate) || rate < 0m)
                 {
-                    row.ErrorText = "The rate must be a number and cannot be negative.";
-                    e.Cancel = true;
+                    e.ErrorText = "The rate must be a number and cannot be negative.";
+                    e.Valid = false;
                     return;
                 }
+                e.Value = rate;
+                return;
             }
 
-            if (e.ColumnIndex == this.colEffectiveFrom.Index)
+            if (column == this.colEffectiveFrom)
             {
                 DateTime from;
-                if (!TryParseDate(value, out from))
+                if (!TryReadDate(e.Value, out from))
                 {
-                    row.ErrorText = "Effective from must be a date, for example 01/07/2025.";
-                    e.Cancel = true;
+                    e.ErrorText = "Effective from must be a date, for example 01/07/2025.";
+                    e.Valid = false;
                     return;
                 }
 
-                DateTime existingTo;
-                string toText = Convert.ToString(row.Cells[this.colEffectiveTo.Index].Value);
-                if (TryParseDate(toText, out existingTo) && existingTo < from)
+                if (r != null && r.EffectiveTo.HasValue && r.EffectiveTo.Value < from)
                 {
-                    row.ErrorText = "Effective from cannot be after effective to.";
-                    e.Cancel = true;
+                    e.ErrorText = "Effective from cannot be after effective to.";
+                    e.Valid = false;
                     return;
                 }
+                e.Value = from;
+                return;
             }
 
-            if (e.ColumnIndex == this.colEffectiveTo.Index && value.Length > 0)
+            if (column == this.colEffectiveTo)
             {
-                DateTime to;
-                if (!TryParseDate(value, out to))
+                if (Convert.ToString(e.Value).Trim().Length == 0)
                 {
-                    row.ErrorText = "Effective to must be a date, or blank for an open ended rate.";
-                    e.Cancel = true;
+                    // Blank is an open ended rate.
+                    e.Value = null;
                     return;
                 }
 
-                DateTime existingFrom;
-                string fromText = Convert.ToString(row.Cells[this.colEffectiveFrom.Index].Value);
-                if (TryParseDate(fromText, out existingFrom) && to < existingFrom)
+                DateTime to;
+                if (!TryReadDate(e.Value, out to))
                 {
-                    row.ErrorText = "Effective to cannot be before effective from.";
-                    e.Cancel = true;
+                    e.ErrorText = "Effective to must be a date, or blank for an open ended rate.";
+                    e.Valid = false;
                     return;
                 }
+
+                if (r != null && to < r.EffectiveFrom)
+                {
+                    e.ErrorText = "Effective to cannot be before effective from.";
+                    e.Valid = false;
+                    return;
+                }
+                e.Value = to;
+                return;
             }
 
-            row.ErrorText = "";
+            if (column == this.colRateNotes && e.Value == null)
+            {
+                e.Value = "";
+            }
         }
 
-        private void grdRates_CellEndEdit(object sender, DataGridViewCellEventArgs e)
+        /// <summary>
+        /// An editor that was opened and closed again without a change still
+        /// holds the DateTime it started with, rather than text.
+        /// </summary>
+        private static bool TryReadDate(object value, out DateTime date)
         {
-            if (_loading || e.RowIndex < 0)
+            if (value is DateTime)
+            {
+                date = (DateTime)value;
+                return true;
+            }
+            return TryParseDate(Convert.ToString(value), out date);
+        }
+
+        private void gvRates_CellValueChanged(object sender, CellValueChangedEventArgs e)
+        {
+            if (_loading)
             {
                 return;
             }
 
-            this.grdRates.Rows[e.RowIndex].ErrorText = "";
-            ApplyRateRow(e.RowIndex);
+            ContractRate r = this.gvRates.GetRow(e.RowHandle) as ContractRate;
+            if (r == null)
+            {
+                return;
+            }
+
+            // The code and name ride along with the id so the search box and
+            // the overlap message can use them without going back to the list.
+            if (e.Column == this.colRateProduct)
+            {
+                Product p = FindProduct(r.ProductId);
+                if (p != null)
+                {
+                    r.ProductCode = p.Code;
+                    r.ProductName = p.Name;
+                }
+            }
 
             // Two rate windows for the same product must not overlap.  This
             // cannot be a cell check because it depends on the other rows, so
-            // it runs once the whole row has been written back.
+            // it runs once the value has been written back.
             string clash;
-            if (RowOverlaps(e.RowIndex, out clash))
+            if (RateOverlaps(r, out clash))
             {
-                this.grdRates.Rows[e.RowIndex].ErrorText = clash;
+                this.gvRates.SetColumnError(null, clash);
                 MessageBox.Show(this, clash, "Contract Rates",
                     MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
+            }
+            else
+            {
+                this.gvRates.SetColumnError(null, "");
             }
 
             RecalculateRateTotals();
             MarkDirty();
         }
 
-        private void ApplyRateRow(int rowIndex)
-        {
-            DataGridViewRow row = this.grdRates.Rows[rowIndex];
-            ContractRate r = row.Tag as ContractRate;
-            if (r == null)
-            {
-                return;
-            }
-
-            Product p = row.Cells[this.colRateProduct.Index].Value as Product;
-            if (p != null)
-            {
-                r.ProductId = p.Id;
-                r.ProductCode = p.Code;
-                r.ProductName = p.Name;
-            }
-
-            decimal rate = 0m;
-            decimal.TryParse(Convert.ToString(row.Cells[this.colRate.Index].Value), out rate);
-            r.RatePerTonne = rate;
-
-            DateTime from;
-            if (TryParseDate(Convert.ToString(row.Cells[this.colEffectiveFrom.Index].Value), out from))
-            {
-                r.EffectiveFrom = from;
-            }
-
-            DateTime to;
-            if (TryParseDate(Convert.ToString(row.Cells[this.colEffectiveTo.Index].Value), out to))
-            {
-                r.EffectiveTo = to;
-            }
-            else
-            {
-                r.EffectiveTo = null;
-            }
-
-            r.Notes = Convert.ToString(row.Cells[this.colRateNotes.Index].Value);
-            if (r.Notes == null)
-            {
-                r.Notes = "";
-            }
-        }
-
         /// <summary>
-        /// True when the row shares a product and an overlapping date window
+        /// True when the rate shares a product and an overlapping date window
         /// with another rate on the account.  An open ended rate runs forever,
         /// so anything starting after it overlaps it.
         /// </summary>
-        private bool RowOverlaps(int rowIndex, out string message)
+        private bool RateOverlaps(ContractRate subject, out string message)
         {
             message = "";
 
-            ContractRate subject = this.grdRates.Rows[rowIndex].Tag as ContractRate;
             if (subject == null || subject.ProductId == 0)
             {
                 return false;
@@ -747,7 +640,8 @@ namespace WeighbridgeAdmin.Forms
 
         /// <summary>
         /// Footer line under the rates grid, rebuilt as one concatenated
-        /// string the same way the ticket list builds its totals.
+        /// string the same way the ticket list builds its totals.  Counts the
+        /// rows the search box has left showing.
         /// </summary>
         private void RecalculateRateTotals()
         {
@@ -756,15 +650,9 @@ namespace WeighbridgeAdmin.Forms
             decimal cheapest = 0m;
             decimal dearest = 0m;
 
-            for (int i = 0; i < this.grdRates.Rows.Count; i++)
+            for (int i = 0; i < this.gvRates.DataRowCount; i++)
             {
-                DataGridViewRow row = this.grdRates.Rows[i];
-                if (row.IsNewRow)
-                {
-                    continue;
-                }
-
-                ContractRate r = row.Tag as ContractRate;
+                ContractRate r = this.gvRates.GetRow(i) as ContractRate;
                 if (r == null)
                 {
                     continue;
@@ -798,13 +686,28 @@ namespace WeighbridgeAdmin.Forms
                 + "Highest " + dearest.ToString("N2");
         }
 
-        private void grdRates_UserDeletingRow(object sender, DataGridViewRowCancelEventArgs e)
+        private void grdRates_KeyDown(object sender, KeyEventArgs e)
         {
-            ContractRate r = e.Row.Tag as ContractRate;
+            if (e.KeyCode != Keys.Delete
+                || !this.gvRates.OptionsBehavior.Editable
+                || this.gvRates.ActiveEditor != null)
+            {
+                return;
+            }
+
+            int handle = this.gvRates.FocusedRowHandle;
+            if (this.gvRates.IsNewItemRow(handle) || !this.gvRates.IsDataRow(handle))
+            {
+                return;
+            }
+
+            ContractRate r = this.gvRates.GetRow(handle) as ContractRate;
             if (r == null)
             {
                 return;
             }
+
+            e.Handled = true;
 
             if (MessageBox.Show(this,
                 "Remove the " + r.ProductCode + " rate of " + r.RatePerTonne.ToString("N2")
@@ -812,7 +715,6 @@ namespace WeighbridgeAdmin.Forms
                 "Delete Contract Rate", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             {
-                e.Cancel = true;
                 return;
             }
 
@@ -820,8 +722,10 @@ namespace WeighbridgeAdmin.Forms
             {
                 _deletedRateIds.Add(r.RateId);
             }
-            _rates.Remove(r);
+            this.gvRates.DeleteRow(handle);
 
+            this.ucRateSearch.ResultCount = this.gvRates.DataRowCount;
+            RecalculateRateTotals();
             MarkDirty();
         }
 
@@ -831,32 +735,21 @@ namespace WeighbridgeAdmin.Forms
 
         private void FillVehicleGrid()
         {
-            this.grdVehicles.Rows.Clear();
-
             List<Vehicle> vehicles = Repository.Current.GetVehiclesByCustomer(this.CustomerId);
-            for (int i = 0; i < vehicles.Count; i++)
-            {
-                Vehicle v = vehicles[i];
-
-                int index = this.grdVehicles.Rows.Add();
-                DataGridViewRow row = this.grdVehicles.Rows[index];
-
-                row.Cells[this.colVehRegistration.Index].Value = v.Registration;
-                row.Cells[this.colVehDescription.Index].Value = v.Description;
-                row.Cells[this.colVehTare.Index].Value = v.TareWeight.ToString("N0");
-                row.Cells[this.colVehMaxGross.Index].Value = v.MaxGross.ToString("N0");
-                row.Cells[this.colVehActive.Index].Value = v.IsActive;
-                row.Tag = v;
-
-                if (!v.IsActive)
-                {
-                    row.DefaultCellStyle.ForeColor = Color.Gray;
-                }
-            }
+            this.grdVehicles.DataSource = vehicles;
 
             this.lblVehicleHint.Text = vehicles.Count.ToString()
                 + " vehicle(s) on this account.  Read only - vehicles are maintained against "
                 + "the vehicle master, not the customer account.";
+        }
+
+        private void gvVehicles_RowStyle(object sender, RowStyleEventArgs e)
+        {
+            Vehicle v = this.gvVehicles.GetRow(e.RowHandle) as Vehicle;
+            if (v != null && !v.IsActive)
+            {
+                e.Appearance.ForeColor = Color.Gray;
+            }
         }
 
         // ------------------------------------------------------------------
@@ -883,13 +776,38 @@ namespace WeighbridgeAdmin.Forms
         }
 
         /// <summary>
-        /// A combo cell whose value is not one of its items raises this rather
-        /// than throwing.  It happens while rows are being rebuilt, and there
-        /// is nothing useful to tell the operator, so it is swallowed.
+        /// A value refused by ValidatingEditor would otherwise raise a message
+        /// box asking whether to correct it.  The error icon on the cell says
+        /// the same thing, and the editor stays open until it is fixed or the
+        /// operator presses Esc.
         /// </summary>
-        private void Grid_DataError(object sender, DataGridViewDataErrorEventArgs e)
+        private void Grid_InvalidValueException(object sender, InvalidValueExceptionEventArgs e)
         {
-            e.ThrowException = false;
+            e.ExceptionMode = DevExpress.XtraEditors.Controls.ExceptionMode.NoAction;
+        }
+
+        /// <summary>
+        /// Posts whatever is still open in the grid - including a half typed
+        /// new row - so the working list is complete before it is checked.
+        /// False when the open cell still holds a value the grid refused.
+        /// </summary>
+        private static bool CommitGrid(GridView view, out string error)
+        {
+            error = "";
+            if (!view.PostEditor())
+            {
+                if (view.ActiveEditor != null)
+                {
+                    error = view.ActiveEditor.ErrorText;
+                }
+                return false;
+            }
+            if (!view.UpdateCurrentRow())
+            {
+                error = view.GetColumnError(null);
+                return false;
+            }
+            return true;
         }
 
         // ------------------------------------------------------------------
@@ -914,28 +832,21 @@ namespace WeighbridgeAdmin.Forms
 
             // Anything the grids refused to accept is still sitting there with
             // its error icon showing.
-            for (int i = 0; i < this.grdContacts.Rows.Count; i++)
+            string error;
+            if (!CommitGrid(this.gvContacts, out error))
             {
-                if (this.grdContacts.Rows[i].ErrorText.Length > 0)
-                {
-                    message = "A contact row still has an error against it:\r\n\r\n"
-                        + this.grdContacts.Rows[i].ErrorText;
-                    focus = this.grdContacts;
-                    this.tabAccount.SelectedTab = this.tabContacts;
-                    return false;
-                }
+                message = "A contact row still has an error against it:\r\n\r\n" + error;
+                focus = this.grdContacts;
+                this.tabAccount.SelectedTab = this.tabContacts;
+                return false;
             }
 
-            for (int i = 0; i < this.grdRates.Rows.Count; i++)
+            if (!CommitGrid(this.gvRates, out error))
             {
-                if (this.grdRates.Rows[i].ErrorText.Length > 0)
-                {
-                    message = "A contract rate row still has an error against it:\r\n\r\n"
-                        + this.grdRates.Rows[i].ErrorText;
-                    focus = this.grdRates;
-                    this.tabAccount.SelectedTab = this.tabRates;
-                    return false;
-                }
+                message = "A contract rate row still has an error against it:\r\n\r\n" + error;
+                focus = this.grdRates;
+                this.tabAccount.SelectedTab = this.tabRates;
+                return false;
             }
 
             // Cross-row rules that only make sense over the whole list.
@@ -968,6 +879,18 @@ namespace WeighbridgeAdmin.Forms
                 if (_rates[i].ProductId == 0)
                 {
                     message = "One of the contract rates has no product against it.";
+                    focus = this.grdRates;
+                    this.tabAccount.SelectedTab = this.tabRates;
+                    return false;
+                }
+
+                // The grid only flags an overlap on the row being keyed, and
+                // that flag goes when the focus moves on, so the whole list
+                // is checked again here.
+                string clash;
+                if (RateOverlaps(_rates[i], out clash))
+                {
+                    message = "A contract rate row still has an error against it:\r\n\r\n" + clash;
                     focus = this.grdRates;
                     this.tabAccount.SelectedTab = this.tabRates;
                     return false;
